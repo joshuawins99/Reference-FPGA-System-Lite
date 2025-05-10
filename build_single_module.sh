@@ -1,5 +1,6 @@
 #!/bin/bash
 rm -f ref_fpga_sys_lite.sv
+rm -f *.tar.gz
 cd rv32_gcc
 ./build.sh
 cd ..
@@ -10,7 +11,7 @@ if [ "$1" = -build ]; then
     if [ "$2" = REL ]; then
         echo -n '"' >> version_string.svh
         echo -n "REL " >> version_string.svh
-        git rev-parse --verify HEAD | cut -c1-7 | xargs echo -n >> version_string.svh
+        cat ../version >> version_string.svh
     else
         echo -n '"' >> version_string.svh
         echo -n "DEV " >> version_string.svh
@@ -19,7 +20,7 @@ if [ "$1" = -build ]; then
 else 
     echo -n '"' >> version_string.svh
     echo -n "DEV " >> version_string.svh
-    echo -n "1234567" >> version_string.svh
+    git rev-parse --verify HEAD | cut -c1-7 | xargs echo -n >> version_string.svh
 fi
 
 echo -n ' ' >> version_string.svh
@@ -27,4 +28,12 @@ date --date 'now' '+%a %b %d %r %Z %Y' | sed -e 's/$/"/' -e 's/,/","/g' >> versi
 
 cd ..
 
+scripts/create_memory_module.py mem_init.mem rtl/picosoc_mem.v
+
 scripts/concatenate_modules.sh cpu_system_filelist.txt ref_fpga_sys_lite.sv
+
+if [ "$1" = -build ]; then
+    if [ "$2" = REL ]; then
+        tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv cpu_reg_package.sv
+    fi
+fi

@@ -11,3 +11,5 @@ rtl/uart_vhdl/uart_vhd_cpu.v
 ref_fpga_sys_lite.sv
 *.mem
 main.bin
+rtl/picosoc_mem.v
+*.tar.gz

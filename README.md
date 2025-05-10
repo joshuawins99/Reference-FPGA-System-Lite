@@ -8,23 +8,22 @@ This is an FPGA Register System that contains a softcore RISC-V CPU that can com
 ## Compatibility
 This project was aimed to provide compatibility across a wide range of FPGAs from various vendors. This has stemmed from the full system project which has been tested on a variety of FPGAs. Any tool with SystemVerilog/Verilog support "should" work with this system.
 
-## How do I use it?
+## Building
 There are a few requirements for building this system:
-```
--Bash
--Python 3
--riscv32 gcc tools
--Optional: sv2v
-```
-
-Release builds based on the latest commit may be available at some point in time. For the time being, it must be built.
+&nbsp;&nbsp;&nbsp;&nbsp; -Bash
+&nbsp;&nbsp;&nbsp;&nbsp; -Python 3
+&nbsp;&nbsp;&nbsp;&nbsp; -riscv32 gcc tools
+&nbsp;&nbsp;&nbsp;&nbsp; -Optional: sv2v
 
 Run the build_single_module.sh script:
 ```bash
 ./build_single_module.sh
 ```
-This should generate two files named ref_fpga_sys_lite.sv and mem_init.mem. These files along with cpu_reg_package.sv make up the complete system. Copy these three files into your project to use.
+This should generate a file named ref_fpga_sys_lite.sv. This file along with cpu_reg_package.sv make up the complete system. Copy these two files into your project to use.
 
+Release builds can be found in the releases section.
+
+## How do I use it?
 An example instantiation of the module is as follows:
 ```Verilog
 import cpu_reg_package::*;

@@ -89,8 +89,7 @@ module main_rv32 #(
         .data_width     (32),
         .ram_size       (RAM_Size),
         .pre_fill       (1),
-        .pre_fill_start (Program_CPU_Start_Address),
-        .pre_fill_file  ("mem_init.mem")
+        .pre_fill_start (Program_CPU_Start_Address)
     ) ram1 (
         .clk            (clk_i),
         .addr           (address),
