@@ -1,0 +1,13 @@
+converted.v
+rv32_gcc/a.elf
+rv32_gcc/a.out
+rv32_gcc/*.c
+rv32_gcc/*.h
+rv32_gcc/*.py
+rv32_gcc/*.mem
+rv32_gcc/*.map
+rtl/version_string.svh
+rtl/uart_vhdl/uart_vhd_cpu.v
+ref_fpga_sys_lite.sv
+*.mem
+main.bin

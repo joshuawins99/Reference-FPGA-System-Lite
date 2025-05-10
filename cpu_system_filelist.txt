@@ -1,0 +1,10 @@
+rtl/main_rv32.sv
+rtl/picorv32/*
+rtl/bus_rv32_interface.sv
+rtl/bram_contained_rv32.sv
+rtl/version_string.svh
+rtl/version_string.sv
+rtl/io_cpu.sv
+rtl/async_fifo/*
+rtl/uart_cpu.sv
+rtl/uart/*
