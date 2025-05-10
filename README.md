@@ -10,10 +10,10 @@ This project was aimed to provide compatibility across a wide range of FPGAs fro
 
 ## Building
 There are a few requirements for building this system:
-&nbsp;&nbsp;&nbsp;&nbsp; -Bash
-&nbsp;&nbsp;&nbsp;&nbsp; -Python 3
-&nbsp;&nbsp;&nbsp;&nbsp; -riscv32 gcc tools
-&nbsp;&nbsp;&nbsp;&nbsp; -Optional: sv2v
+-Bash
+-Python 3
+-riscv32 gcc tools
+-Optional: sv2v
 
 Run the build_single_module.sh script:
 ```bash
