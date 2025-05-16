@@ -47,12 +47,10 @@ assign cpubus.external_data_i = ex_data_i;
 assign uart_tx_o              = cpubus.uart_tx_o;
 assign cpubus.uart_rx_i       = uart_rx_i;
 
-
-main_rv32 #(
-    .FPGAClkSpeed (FPGAClkSpeed)
-) m1 (
-    .cpubus       (cpubus)
+main_rv32 m1 (
+    .cpubus (cpubus)
 );
+
 endmodule
 ```
 

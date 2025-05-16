@@ -23,6 +23,9 @@ def generate_verilog(mem_file, output_file, words=256, offset=0, prefill=1):
     reg [31:0] mem [0:WORDS-1];
 
     initial begin
+        for(int i = 0; i < WORDS; i++) begin
+            mem[i] = 0;
+        end
         if (PREFILL) begin
 """
 

@@ -109,13 +109,13 @@ module uart_cpu #(
         .FALLTHROUGH ("TRUE")
     ) async_fifo_uart_6502_1 (
         .wclk   (clk_i),
-        .wrst_n ('1),
+        .wrst_n (!reset_i),
         .winc   (rx_done),
         .wfull  (),
         .awfull (fifo_almost_full),
         .wdata  (rx_out),
         .rclk   (clk_i),
-        .rrst_n ('1),
+        .rrst_n (!reset_i),
         .rinc   (fifo_read),
         .rdata  (fifo_data_out),
         .rempty (fifo_empty),
@@ -130,7 +130,7 @@ module uart_cpu #(
         .OversampleRate  (16)
     ) uart_1 (
         .clk_i           (clk_i),
-        .reset_i         ('0),
+        .reset_i         (reset_i),
         .uart_txd_o      (uart_tx_o),
         .uart_rxd_i      (uart_rx_i),
         .data_o          (rx_out),

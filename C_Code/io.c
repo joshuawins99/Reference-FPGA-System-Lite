@@ -45,7 +45,7 @@ char* readFPGA(char *addr) {
 }
 
 void writeFPGA(char *addr, char *data) {
-    WriteIO32(atoi(addr), strtol(data, NULL, 10));
+    WriteIO32(atoi(addr), strtoul(data, NULL, 10));
 }
 
 typedef char* (*command_func)(char*);

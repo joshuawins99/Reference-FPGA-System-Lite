@@ -13,3 +13,8 @@ ref_fpga_sys_lite.sv
 main.bin
 rtl/picosoc_mem.v
 *.tar.gz
+sim/work
+sim/vlog.opt
+sim/vsim.wlf
+sim/transcript
+sim_result.txt

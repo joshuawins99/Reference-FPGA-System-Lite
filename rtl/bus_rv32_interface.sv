@@ -1,3 +1,5 @@
+import cpu_reg_package::*;
+
 interface bus_rv32;
     logic                     clk_i;
     logic                     reset_i;
