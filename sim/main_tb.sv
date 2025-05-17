@@ -79,18 +79,31 @@ module main_tb;
 
     task automatic RecvUARTMessage(output string msg);
         automatic byte char_array[$];
-        while (1) begin
-            wait(rx_done == 1);
-            char_array.push_back(rx_out);
-            wait(rx_done == 0);
-            if (rx_out == "\n") break;
-        end
+        logic received = 0;
+        fork
+        begin
+           while (1) begin
+                wait(rx_done == 1);
+                char_array.push_back(rx_out);
+                wait(rx_done == 0);
+                if (rx_out == "\n") break;
+            end
 
-        // Construct the string manually
-        msg = "";
-        foreach (char_array[i]) begin
-            msg = {msg, char_array[i]};
+            // Construct the string manually
+            msg = "";
+            foreach (char_array[i]) begin
+                msg = {msg, char_array[i]};
+            end
+            received = 1;
         end
+        begin
+            repeat(500000) @(posedge clk);
+            if (received == 0) begin
+                track_errors("Message Not Received!");
+            end
+        end
+        join_any
+        
     endtask
 
     task automatic readVersionFile(output string extracted);
@@ -141,12 +154,25 @@ module main_tb;
     task TestWriteExternalOutput;
         string msg;  
         int unsigned input_data;  
-        string to_send;        
+        string to_send;   
+        logic received;   
         begin   
+            received = 0;
             input_data = $urandom_range(0,(2**32)-1);
             to_send = $sformatf("wFPGA,%0d,%0d\n", get_address_start(io_e)+4, input_data);
             SendUARTMessage(to_send);
-            wait (address == 'h9004);
+            fork
+                begin
+                    wait (address == 'h9004);
+                    received = 1;
+                end
+                begin
+                    if (received == 0) begin
+                        repeat(1500000) @(posedge clk);
+                        track_errors("Write Never Received!");
+                    end
+                end
+            join_any
             repeat(2) @(posedge clk);
             if (ex_data_o != input_data) begin
                 $display("ex_data_o:  %d", ex_data_o);

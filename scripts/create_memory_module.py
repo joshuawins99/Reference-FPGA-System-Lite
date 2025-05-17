@@ -20,32 +20,47 @@ def generate_verilog(mem_file, output_file, words=256, offset=0, prefill=1):
 );
 
     // Memory array declaration
-    reg [31:0] mem [0:WORDS-1];
+    reg [7:0] mem1 [0:WORDS-1];
+    reg [7:0] mem2 [0:WORDS-1];
+    reg [7:0] mem3 [0:WORDS-1];
+    reg [7:0] mem4 [0:WORDS-1];
 
     initial begin
         for(int i = 0; i < WORDS; i++) begin
-            mem[i] = 0;
+            mem1[i] = 0;
+            mem2[i] = 0;
+            mem3[i] = 0;
+            mem4[i] = 0;
         end
         if (PREFILL) begin
 """
 
     # Embed initialization statements within the initial block
     for idx, line in enumerate(mem_data):
-        verilog_code += f"            mem[OFFSET + {idx}] = 32'h{line};\n"
+        verilog_code += f"            mem1[OFFSET + {idx}] = 8'h{line[-2:]};\n"
+        verilog_code += f"            mem2[OFFSET + {idx}] = 8'h{line[-4:-2]};\n"
+        verilog_code += f"            mem3[OFFSET + {idx}] = 8'h{line[-6:-4]};\n"
+        verilog_code += f"            mem4[OFFSET + {idx}] = 8'h{line[-8:-6]};\n"
 
     # Fill remaining entries with zero
     for idx in range(num_entries, words):
-        verilog_code += f"            mem[OFFSET + {idx}] = 32'h00000000;\n"
+        verilog_code += f"            mem1[OFFSET + {idx}] = 8'h00;\n"
+        verilog_code += f"            mem2[OFFSET + {idx}] = 8'h00;\n"
+        verilog_code += f"            mem3[OFFSET + {idx}] = 8'h00;\n"
+        verilog_code += f"            mem4[OFFSET + {idx}] = 8'h00;\n"
 
     verilog_code += """        end
     end
 
     always @(posedge clk) begin
-        rdata <= mem[addr];
-        if (wen[0]) mem[addr][ 7: 0] <= wdata[ 7: 0];
-        if (wen[1]) mem[addr][15: 8] <= wdata[15: 8];
-        if (wen[2]) mem[addr][23:16] <= wdata[23:16];
-        if (wen[3]) mem[addr][31:24] <= wdata[31:24];
+        rdata <= {mem4[addr], mem3[addr], mem2[addr], mem1[addr]};
+    end
+
+    always @(posedge clk) begin
+        if (wen[0]) mem1[addr] <= wdata[ 7: 0];
+        if (wen[1]) mem2[addr] <= wdata[15: 8];
+        if (wen[2]) mem3[addr] <= wdata[23:16];
+        if (wen[3]) mem4[addr] <= wdata[31:24];
     end
 endmodule
 """

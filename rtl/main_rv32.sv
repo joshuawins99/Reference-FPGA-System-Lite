@@ -39,20 +39,22 @@ module main_rv32 (
 `endif
 
     data_reg_inputs_t data_reg_inputs;
+    data_reg_inputs_t data_reg_inputs_interface;
+    data_reg_inputs_t data_reg_inputs_combined;
 
 `ifndef SIM
-    assign clk_i                  = cpubus.clk_i;
-    assign reset_i                = cpubus.reset_i;
-    assign irq                    = cpubus.irq_i;
-    assign cpubus.data_o          = cpu_data_o;
-    assign data_reg_inputs        = cpubus.data_i;
-    assign cpubus.we_o            = cpu_we_o;
-    assign cpubus.address_o       = address;
-    assign cpubus.cpu_reset_o     = reset;
-    assign cpubus.external_data_o = external_data_o;
-    assign external_data_i        = cpubus.external_data_i;
-    assign uart_rx_i              = cpubus.uart_rx_i;
-    assign cpubus.uart_tx_o       = uart_tx_o;
+    assign clk_i                     = cpubus.clk_i;
+    assign reset_i                   = cpubus.reset_i;
+    assign irq                       = cpubus.irq_i;
+    assign cpubus.data_o             = cpu_data_o;
+    assign data_reg_inputs_interface = cpubus.data_i;
+    assign cpubus.we_o               = cpu_we_o;
+    assign cpubus.address_o          = address;
+    assign cpubus.cpu_reset_o        = reset;
+    assign cpubus.external_data_o    = external_data_o;
+    assign external_data_i           = cpubus.external_data_i;
+    assign uart_rx_i                 = cpubus.uart_rx_i;
+    assign cpubus.uart_tx_o          = uart_tx_o;
 `endif
 
 //******************************************* Data Registers and Mux *******************************************
@@ -63,11 +65,20 @@ module main_rv32 (
         address_reg <= address;
     end 
 
+    always_comb begin //Array Slicing to combine the internal and external modules on bus
+        for (int i = 0; i <= uart_e; i++) begin
+            data_reg_inputs_combined[i] = data_reg_inputs[i];
+        end
+        for (int i = uart_e+1; i < num_entries; i++) begin
+            data_reg_inputs_combined[i] = data_reg_inputs_interface[i];
+        end
+    end
+
     always_comb begin
         data_reg = '0;
         for (int unsigned i = 0; i < num_entries; i++) begin
             if (address_reg >= get_address_mux(2*i+1) && address_reg <= get_address_mux(2*i)) begin
-                data_reg = data_reg_inputs[(num_entries-1)-i];
+                data_reg = data_reg_inputs_combined[(num_entries-1)-i];
             end
         end
     end

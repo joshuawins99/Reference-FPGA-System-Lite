@@ -66,4 +66,4 @@ package cpu_reg_package;
 
     typedef logic [data_width-1:0] data_reg_inputs_t [0:num_entries-1];
 
-endpackage;
+endpackage
