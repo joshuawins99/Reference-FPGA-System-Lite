@@ -19,14 +19,53 @@ Run the build_single_module.sh script:
 ```bash
 ./build_single_module.sh
 ```
-This should generate a file named ref_fpga_sys_lite.sv. This file along with cpu_reg_package.sv make up the complete system. Copy these two files into your project to use.
+This should generate a file named ref_fpga_sys_lite.sv. This file along with scripts/generate_cpu_instance.py make up the complete system. Copy these two files into your project to use. A config file must also be provided. Details below.
 
 Release builds can be found in the releases section.
 
 ## How do I use it?
-An example instantiation of the module is as follows:
+Create a folder and run the python script from a level up from the created folder. The folder can be any name and will reflect the name of the package:
+```bash
+mkdir cpu_test
+ls
+cpu_test ref_fpga_sys_lite.sv generate_cpu_instance.py
+```
+
+Now create a config file named cpu_config.txt and place it in the cpu_test folder. It follows this format:
+```
+#CPU Config File
+#Parameters follow Name : Value : Width (Optional)
+#BUILTIN_MODULES are included modules
+#Modules follow enumeration name : Enable TRUE/FALSE : Address Bounds
+#Place extra modules not included by default in USER_MODULES
+
+BUILTIN_PARAMETERS:
+    FPGAClkSpeed : 40000000,
+    BaudRateCPU : 230400,
+    address_width : 16,
+    data_width : 32,
+    RAM_Size : 10240,
+    Program_CPU_Start_Address : 'h0 : {31:0},
+    VersionStringSize : 64
+    
+USER_PARAMETERS:
+    
+BUILTIN_MODULES:
+    ram_e : TRUE : {0, RAM_Size},
+    version_string_e : TRUE : {'h8000, 'h8000+(VersionStringSize-1)*4},
+    io_e : TRUE : {'h9000, 'h900C},
+    uart_e : TRUE : {'h9100, 'h9110}
+    
+USER_MODULES:
+```
+
+Run the python script to generate the module and package file:
+```bash
+python3 generate_cpu_instance.py
+```
+An example instantiation of the module is as follows. The package name will be {folder name}_package and the top level instantiation will be {folder name}_top:
 ```Verilog
-import cpu_reg_package::*;
+import cpu_test_package::*;
 module ref_fpga_sys_lite_top_example (
     input  logic        clk_i,
     input  logic        reset_i,
@@ -47,14 +86,14 @@ assign cpubus.external_data_i = ex_data_i;
 assign uart_tx_o              = cpubus.uart_tx_o;
 assign cpubus.uart_rx_i       = uart_rx_i;
 
-main_rv32 m1 (
+cpu_test_top m1 (
     .cpubus (cpubus)
 );
 
 endmodule
 ```
 
-A few parameters in the package file have to be configured to the specific project. The most important one to check is FPGAClkSpeed. Set this to the frequency of clk_i which corresponds to the example instantiation above.
+A few parameters in the config file have to be configured to the specific project. The most important one to check is FPGAClkSpeed. Set this to the frequency of clk_i which corresponds to the example instantiation above.
 
 Also take note of the BaudRateCPU parameter. This is the baud rate the UART is configured to run at. The default configuration is 230400 Baud, 1 Stop Bit, and no parity bit.
 
@@ -114,6 +153,6 @@ In order to do reads and writes to the built in I/O module, the start and end ad
 ```
 ## Adding Additional Functionality
 
-By creating a new custom module that follows the port structure of the bus_rv32 interface, one can create an accessory module that has custom functionality and can be accessed by the cpu. In order to add a new module, an additional enum must be added to the list in the cpu_reg_package.sv file and a start and end address must be given to the mdoule. This is done through the add_address function and is added to the module_addresses localparam. Data reads from custom modules are expected to have their data available one clock cycle after the accompanying address is given. If a combinatorial output is desired, use of the address_reg logic ensures that data is valid when the CPU expects it.
+By creating a new custom module that follows the port structure of the bus_rv32 interface, one can create an accessory module that has custom functionality and can be accessed by the cpu. In order to add a new module, an additional entry must be added to the USER_MODULES list in the cpu_config.txt file and a start and end address must be given to the mdoule. Data reads from custom modules are expected to have their data available one clock cycle after the accompanying address is given. If a combinatorial output is desired, use of the address_reg logic ensures that data is valid when the CPU expects it.
 
 The host side is up to the specfic use case. Anything that supports a UART type device can be used for communication. Three commands are available for communication: rFPGA (read a register from the FPGA), wFPGA (write a value to a register in the FPGA), and readFPGAVersion (reports the build time and version of the FPGA build running). 

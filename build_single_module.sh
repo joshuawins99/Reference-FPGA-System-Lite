@@ -48,7 +48,7 @@ if [ "$1" = -build ]; then
 
         if grep -q "$search_string" "$file"; then
             echo "Testbench Passed!"
-            tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv cpu_reg_package.sv
+            tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv -C scripts/ generate_cpu_instance.py
         else
             echo "Testbench Failed!"
         fi
