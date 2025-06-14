@@ -63,7 +63,7 @@ Run the python script to generate the module and package file:
 ```bash
 python3 generate_cpu_instance.py
 ```
-An example instantiation of the module is as follows. The package name will be {folder name}_package and the top level instantiation will be {folder name}_top:
+An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32:
 ```Verilog
 import cpu_test_package::*;
 module ref_fpga_sys_lite_top_example (
@@ -75,7 +75,7 @@ module ref_fpga_sys_lite_top_example (
     output logic [31:0] ex_data_o
 );
 
-bus_rv32 cpubus();
+cpu_test_bus_rv32 cpubus();
 
 assign cpubus.clk_i           = clk_i;
 assign cpubus.reset_i         = reset_i;

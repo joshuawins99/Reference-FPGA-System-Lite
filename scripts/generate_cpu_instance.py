@@ -215,6 +215,38 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
 
         updated_content = re.sub(r"\bmodule main_rv32\b", f"module {package_base_name}_top", updated_content)
 
+        MODULES_LIST = {
+            "cpu_rv32",
+            "bram_contained_rv32",
+            "version_string",
+            "uart_cpu",
+            "io_cpu", 
+            "picorv32*",
+            "picosoc_mem",
+            "async_fifo",
+            "sync_r2w",
+            "sync_w2r",
+            "wptr_full",
+            "fifomem",
+            "rptr_empty",
+            "uart_tx",
+            "uart_rx",
+            "uart_parity",
+            "uart_clk_div",
+            "uart_debouncer",
+            "bus_rv32"
+        }
+
+        for module_pattern in MODULES_LIST:
+            if "*" in module_pattern:
+                base_pattern = module_pattern.replace("*", "")  # Remove '*'
+                
+                # Match any word containing the base pattern
+                updated_content = re.sub(rf"\b(\w*{base_pattern}\w*)\b", package_base_name + "_" + r"\1", updated_content)
+            else:
+                # Standard replacement for exact matches
+                updated_content = re.sub(rf"\b{module_pattern}\b", f"{package_base_name}_{module_pattern}", updated_content)
+
         # Also replace the package declaration inside the file
         updated_content = updated_content.replace(f"package {package_base_name};", f"package {modified_package_name};")
 
