@@ -254,11 +254,24 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
         # Identify the last enabled built-in module
         builtin_modules = config.get("BUILTIN_MODULES", {})
         enabled_modules = [module for module, details in builtin_modules.items() if details["flag"] == "TRUE"]
-        last_enabled_module = enabled_modules[-1] if enabled_modules else "uart_e"  # Default to uart_e if none found
 
-        # Replace uart_e in the always_comb section
-        updated_content = updated_content.replace("for (int i = 0; i <= uart_e;", f"for (int i = 0; i <= {last_enabled_module};")
-        updated_content = updated_content.replace("for (int i = uart_e+1;", f"for (int i = {last_enabled_module}+1;")
+        if enabled_modules:
+            last_enabled_module = enabled_modules[-1]
+            updated_content = updated_content.replace("for (int i = 0; i <= uart_e;", f"for (int i = 0; i <= {last_enabled_module};")
+            updated_content = updated_content.replace("for (int i = uart_e+1;", f"for (int i = {last_enabled_module}+1;")
+        else:
+            # No built-in modules enabled, comment out the first loop entirely
+            updated_content = updated_content.replace(
+                "        for (int i = 0; i <= uart_e; i++) begin\n" +
+                "            data_reg_inputs_combined[i] = data_reg_inputs[i];\n" +
+                "        end",
+                "//         for (int i = 0; i <= uart_e; i++) begin\n" +
+                "//             data_reg_inputs_combined[i] = data_reg_inputs[i];\n" +
+                "//         end"
+            )
+            
+            # Adjust the second loop to start at i = 0
+            updated_content = updated_content.replace("for (int i = uart_e+1;", "for (int i = 0;")  
 
         # Comment out the entire instantiation block if the module is disabled
         # Define a mapping of module identifiers to their actual module names
