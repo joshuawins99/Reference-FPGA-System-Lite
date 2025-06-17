@@ -272,7 +272,7 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
         for module, details in builtin_modules.items():
             if details["flag"] == "FALSE":
                 # Lookup the correct module name from the dictionary, fallback to default if missing
-                module_name = MODULE_NAME_MAPPING.get(module, module)  # If not in mapping, keep original
+                module_name = package_base_name + "_" + MODULE_NAME_MAPPING.get(module, module)  # If not in mapping, keep original
 
                 # Updated regex pattern to match only the correct module instantiation block
                 pattern = rf"{module_name}\s*#\([\s\S]*?\)\s*;"
