@@ -235,7 +235,9 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             "uart_parity",
             "uart_clk_div",
             "uart_debouncer",
-            "bus_rv32"
+            "bus_rv32",
+            "bus_cdc_single",
+            "bus_cdc"
         }
 
         for module_pattern in MODULES_LIST:
@@ -276,10 +278,10 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
         # Comment out the entire instantiation block if the module is disabled
         # Define a mapping of module identifiers to their actual module names
         MODULE_NAME_MAPPING = {
-            "uart_e": "uart_cpu",
-            "io_e": "io_cpu",
+            "uart_e"          : "uart_cpu",
+            "io_e"            : "io_cpu",
             "version_string_e": "version_string",
-            "ram_e": "bram_contained_rv32",
+            "ram_e"           : "bram_contained_rv32"
         }
 
         for module, details in builtin_modules.items():

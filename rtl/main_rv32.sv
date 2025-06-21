@@ -2,11 +2,13 @@ import cpu_reg_package::*;
 
 module main_rv32 (
 `ifndef SIM
-    bus_rv32.from_top  cpubus
+    bus_rv32.from_cpu  cpubus
 `else
     input  logic                     clk_i,
     input  logic                     reset_i,
     output logic [data_width-1:0]    cpu_data_o,
+    input  data_reg_inputs_t         cpu_data_i,
+    input  logic                     cpu_halt_i,
     output logic                     cpu_we_o,
     output logic [3:0]               we_ram_o,
     input  logic                     irq,
@@ -27,6 +29,7 @@ module main_rv32 (
     logic [3:0]               we_ram_o;
     logic                     irq;
     logic [address_width-1:0] address;
+    logic                     cpu_halt_i;
 
     logic [data_width-1:0]    external_data_o;
     logic [data_width-1:0]    external_data_i;
@@ -51,6 +54,7 @@ module main_rv32 (
     assign cpubus.we_o               = cpu_we_o;
     assign cpubus.address_o          = address;
     assign cpubus.cpu_reset_o        = reset;
+    assign cpu_halt_i                = cpubus.cpu_halt_i;
     assign cpubus.external_data_o    = external_data_o;
     assign external_data_i           = cpubus.external_data_i;
     assign uart_rx_i                 = cpubus.uart_rx_i;
@@ -62,7 +66,11 @@ module main_rv32 (
     logic [address_width-1:0]   address_reg;
 
     always_ff @(posedge clk_i) begin
-        address_reg <= address;
+        if (cpu_halt_i == 1'b0) begin
+            address_reg <= address;
+        end else begin
+            address_reg <= address_reg;
+        end
     end 
 
     always_comb begin //Array Slicing to combine the internal and external modules on bus
@@ -70,7 +78,11 @@ module main_rv32 (
             data_reg_inputs_combined[i] = data_reg_inputs[i];
         end
         for (int i = uart_e+1; i < num_entries; i++) begin
+        `ifndef SIM
             data_reg_inputs_combined[i] = data_reg_inputs_interface[i];
+        `else
+            data_reg_inputs_combined[i] = cpu_data_i[i];
+        `endif
         end
     end
 
@@ -105,14 +117,15 @@ module main_rv32 (
         .StackAddress        (),
         .address_width       (address_width)
     ) cpu1 (
-        .clk_i     (clk_i),
-        .reset_i   (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
-        .address_o (address),
-        .data_i    (data_reg),
-        .data_o    (cpu_data_o),
-        .we_o      (cpu_we_o),
-        .we_ram_o  (we_ram_o),
-        .irq_i     (irq)
+        .clk_i      (clk_i),
+        .reset_i    (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
+        .address_o  (address),
+        .cpu_halt_i (cpu_halt_i),
+        .data_i     (data_reg),
+        .data_o     (cpu_data_o),
+        .we_o       (cpu_we_o),
+        .we_ram_o   (we_ram_o),
+        .irq_i      (irq)
     );
 
     bram_contained_rv32 #(

@@ -9,6 +9,7 @@ interface bus_rv32;
     logic [data_width-1:0]    data_o;
     logic                     irq_i;
     logic                     cpu_reset_o;
+    logic                     cpu_halt_i;
     logic [data_width-1:0]    external_data_i;
     logic [data_width-1:0]    external_data_o;
     logic                     uart_tx_o;
@@ -17,19 +18,20 @@ interface bus_rv32;
     modport to_cpu (
         input  clk_i,
         input  reset_i,
-        output address_o,
-        input  data_i,
-        output we_o,
-        output data_o,
-        input  irq_i,
+        input  address_o,
+        output data_i,
+        input  we_o,
+        input  data_o,
+        output irq_i,
         output cpu_reset_o,
-        input  external_data_i,
-        output external_data_o,
-        output uart_tx_o,
-        input  uart_rx_i
+        output cpu_halt_i,
+        output external_data_i,
+        input  external_data_o,
+        input  uart_tx_o,
+        output uart_rx_i
     );
 
-    modport from_top (
+    modport from_cpu (
         input  clk_i,
         input  reset_i,
         output address_o,
@@ -38,6 +40,7 @@ interface bus_rv32;
         output data_o,
         input  irq_i,
         output cpu_reset_o,
+        input  cpu_halt_i,
         input  external_data_i,
         output external_data_o,
         output uart_tx_o,

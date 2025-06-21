@@ -16,6 +16,10 @@ module main_tb;
     logic [address_width-1:0] address;
     logic                     we_o;
 
+    logic [data_width-1:0]    cpu_data_o;
+    data_reg_inputs_t         cpu_data_i;
+    logic                     cpu_halt_i;
+
     integer error_count = 0;
 
     localparam clk_per = (1/FPGAClkSpeed)*10^9;
@@ -25,11 +29,20 @@ module main_tb;
         clk = ~clk;
     end
 
+    logic clk_cdc = 1'b0;
+
+    always begin
+        #(clk_per/4.26);
+        clk_cdc = ~clk_cdc;
+    end
+
     task track_errors;
         input string disp;
         begin
             error_count = error_count + 1;
             $display("Error: ", disp);
+            $timeformat(-9, 2, " ns", 10);
+            $display("Simulation time is: %t", $time);
         end
     endtask
 
@@ -41,6 +54,9 @@ module main_tb;
         .uart_rx_i       (uart_tx_o),
         .uart_tx_o       (uart_rx_i),
         .address         (address),
+        .cpu_data_o      (cpu_data_o),
+        .cpu_data_i      (cpu_data_i),
+        .cpu_halt_i      (cpu_halt_i),
         .irq             ('0),
         .cpu_we_o        (we_o)
     );
@@ -62,6 +78,61 @@ module main_tb;
         .data_valid_i    (tx_start),
         .data_in_ready_o (tx_busy)
     );
+
+    bus_rv32 cpubus();
+
+    assign cpubus.clk_i     = clk;
+    assign cpubus.reset_i   = reset;
+    assign cpubus.cpu_reset_o = reset;
+
+    assign cpubus.data_o    = cpu_data_o;
+    assign cpu_data_i       = cpubus.data_i;
+    assign cpubus.address_o = address;
+    assign cpu_halt_i       = cpubus.cpu_halt_i; 
+    assign cpubus.we_o      = we_o;
+
+    bus_rv32 cdc_cpubus [num_entries] ();
+
+    logic cdc_clocks [num_entries];
+
+    assign cdc_clocks[test_cdc_e] = clk_cdc;
+
+    bus_cdc #(
+        .bus_cdc_start_address (get_address_start(test_cdc_e)),
+        .bus_cdc_end_address   (get_address_end(test_cdc_e))
+    ) cdc_1 (
+        .cdc_clks_i (cdc_clocks),
+        .cpubus_i   (cpubus),
+        .cpubus_o   (cdc_cpubus)
+    );
+
+    logic [data_width-1:0] test_cdc_register = '0;
+
+    always_ff @(posedge clk_cdc) begin
+        if (cdc_cpubus[test_cdc_e].we_o == 1'b1) begin
+            unique case (cdc_cpubus[test_cdc_e].address_o)
+                get_address_start(test_cdc_e) : begin
+                    test_cdc_register <= cdc_cpubus[test_cdc_e].data_o;
+                end
+                default : begin
+                    test_cdc_register <= test_cdc_register;
+                end
+            endcase
+        end
+    end
+
+    always_ff @(posedge clk_cdc) begin
+        if (cdc_cpubus[test_cdc_e].we_o == 1'b0) begin
+            unique case (cdc_cpubus[test_cdc_e].address_o)
+                get_address_start(test_cdc_e) : begin
+                    cdc_cpubus[test_cdc_e].data_i[test_cdc_e] <= test_cdc_register;
+                end
+                default : begin
+                    cdc_cpubus[test_cdc_e].data_i[test_cdc_e] <= '0;
+                end
+            endcase
+        end
+    end
 
     task SendUARTMessage (string messageToSend);
         begin
@@ -168,7 +239,7 @@ module main_tb;
                 end
                 begin
                     if (received == 0) begin
-                        repeat(1500000) @(posedge clk);
+                        repeat(25000000) @(posedge clk);
                         track_errors("Write Never Received!");
                     end
                 end
@@ -200,6 +271,58 @@ module main_tb;
         end
     endtask
 
+    task TestWriteCDCModule;
+        string msg;  
+        int unsigned input_data;  
+        string to_send;   
+        logic received;   
+        begin   
+            received = 0;
+            input_data = $urandom_range(0,(2**32)-1);
+            to_send = $sformatf("wFPGA,%0d,%0d\n", get_address_start(test_cdc_e), input_data);
+            SendUARTMessage(to_send);
+            fork
+                begin
+                    wait (cdc_cpubus[test_cdc_e].address_o == get_address_start(test_cdc_e));
+                    received = 1;
+                end
+                begin
+                    if (received == 0) begin
+                        repeat(25000000) @(posedge clk_cdc);
+                        track_errors("Write Never Received!");
+                    end
+                end
+            join_any
+            repeat(2) @(posedge clk_cdc);
+            if (test_cdc_register != input_data) begin
+                $display("test_cdc_register:  %d", test_cdc_register);
+                $display("input_data:         %d", input_data);
+                track_errors("CDC Register Write Not Correct!");
+            end
+        end
+    endtask
+
+    task TestReadCDCModule;
+        string msg;  
+        int unsigned input_data;  
+        string to_send;   
+        logic received; 
+        int num_recv;  
+        begin   
+            received = 0;
+            input_data = $urandom_range(0,(2**32)-1);
+            to_send = $sformatf("rFPGA,%0d\n", get_address_start(test_cdc_e));
+            SendUARTMessage(to_send);
+            RecvUARTMessage(msg);
+            $sscanf(msg, "%d", num_recv);
+            if (test_cdc_register != num_recv) begin
+                $display("test_cdc_register: %d", test_cdc_register);
+                $display("msg:               %d", msg);
+                track_errors("CDC Register Write Not Correct!");
+            end
+        end
+    endtask
+
     initial begin
         reset = 1'b1;
         repeat(10) begin
@@ -215,6 +338,12 @@ module main_tb;
             TestVersionReadBack();
             TestWriteExternalOutput();
             TestReadExternalInput();
+            TestWriteCDCModule();
+            TestReadCDCModule();
+        end
+        repeat(10) begin
+            TestWriteCDCModule();
+            TestReadCDCModule();
         end
 
         if (error_count >= 1) begin

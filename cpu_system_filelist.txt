@@ -9,3 +9,5 @@ rtl/io_cpu.sv
 rtl/async_fifo/*
 rtl/uart_cpu.sv
 rtl/uart/*
+rtl/bus_cdc_single.sv
+rtl/bus_cdc.sv

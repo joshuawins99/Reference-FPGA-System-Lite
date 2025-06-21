@@ -3,9 +3,10 @@ module cpu_rv32 #(
     parameter StackAddress        = 0,
     parameter address_width       = 32
 )(
-    input logic                      clk_i,
-    input logic                      reset_i,
+    input  logic                     clk_i,
+    input  logic                     reset_i,
     output logic [address_width-1:0] address_o,
+    input  logic                     cpu_halt_i,
     input  logic [31:0]              data_i,
     output logic [31:0]              data_o,
     output logic                     we_o,
@@ -15,6 +16,7 @@ module cpu_rv32 #(
 );
 
     logic mem_valid;
+    logic mem_ready_int;
     logic mem_ready;
     logic [3:0] mem_wstrb;
     logic [31:0] address;
@@ -28,11 +30,19 @@ module cpu_rv32 #(
 
     always_ff @(posedge clk_i) begin
         if (mem_valid == 1'b1) begin
-            mem_ready <= 1'b1;
+            mem_ready_int <= 1'b1;
         end else begin
-            mem_ready <= 1'b0;
+            mem_ready_int <= 1'b0;
         end
     end 
+
+    always_comb begin
+        if (cpu_halt_i == 1'b1) begin
+            mem_ready = 1'b0;
+        end else begin
+            mem_ready = mem_ready_int;
+        end
+    end
 
     picorv32 #(
         .PROGADDR_RESET       (ProgramStartAddress),

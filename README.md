@@ -86,6 +86,9 @@ assign cpubus.external_data_i = ex_data_i;
 assign uart_tx_o              = cpubus.uart_tx_o;
 assign cpubus.uart_rx_i       = uart_rx_i;
 
+//Needs to be 0 if not using CDC module discussed down below
+assign cpubus.cpu_halt_i      = 1'b0;
+
 cpu_test_top m1 (
     .cpubus (cpubus)
 );
@@ -156,3 +159,52 @@ In order to do reads and writes to the built in I/O module, the start and end ad
 By creating a new custom module that follows the port structure of the bus_rv32 interface, one can create an accessory module that has custom functionality and can be accessed by the cpu. In order to add a new module, an additional entry must be added to the USER_MODULES list in the cpu_config.txt file and a start and end address must be given to the mdoule. Data reads from custom modules are expected to have their data available one clock cycle after the accompanying address is given. If a combinatorial output is desired, use of the address_reg logic ensures that data is valid when the CPU expects it.
 
 The host side is up to the specfic use case. Anything that supports a UART type device can be used for communication. Three commands are available for communication: rFPGA (read a register from the FPGA), wFPGA (write a value to a register in the FPGA), and readFPGAVersion (reports the build time and version of the FPGA build running). 
+
+## Clock Domain Crossing
+A clock domain crossing bridge has been added in order to facilitate the use of modules on different clock domains. An example of using this module can be seen below.
+```Verilog
+logic cdc_clocks [num_entries];
+
+assign cdc_clocks[user_module_1_e] = clk_30; //One clock
+assign cdc_clocks[user_module_2_e] = clk_100; //Another Clock
+
+cpu_test_bus_rv32 cdc_cpubus [num_entries]();
+
+cpu_test_bus_cdc #(
+    .bus_cdc_start_address (get_address_start(user_module_1_e)),
+    .bus_cdc_end_address   (get_address_end(user_module_2_e))
+) cdc_1 (
+    .cdc_clks_i            (cdc_clocks),
+    .cpubus_i              (cpubus),
+    .cpubus_o              (cdc_cpubus)
+);
+
+//In the clk_30 domain
+user_module_1_e #(
+    .BaseAddress   (get_address_start(user_module_1_e)),
+    .address_width (address_width),
+    .data_width    (data_width)
+) test_mod_1 (
+    .clk_i         (cdc_cpubus[user_module_1_e].clk_i),
+    .reset_i       (cdc_cpubus[user_module_1_e].cpu_reset_o),
+    .address_i     (cdc_cpubus[user_module_1_e].address_o),
+    .data_i        (cdc_cpubus[user_module_1_e].data_o),
+    .data_o        (cdc_cpubus[user_module_1_e].data_i[user_module_1_e]),
+    .rd_wr_i       (cdc_cpubus[user_module_1_e].we_o)
+);
+
+//In the clk_100 domain
+user_module_2_e #(
+    .BaseAddress   (get_address_start(user_module_2_e)),
+    .address_width (address_width),
+    .data_width    (data_width)
+) test_mod_2 (
+    .clk_i         (cdc_cpubus[user_module_2_e].clk_i),
+    .reset_i       (cdc_cpubus[user_module_2_e].cpu_reset_o),
+    .address_i     (cdc_cpubus[user_module_2_e].address_o),
+    .data_i        (cdc_cpubus[user_module_2_e].data_o),
+    .data_o        (cdc_cpubus[user_module_2_e].data_i[user_module_2_e]),
+    .rd_wr_i       (cdc_cpubus[user_module_2_e].we_o)
+);
+```
+Modules are still expected to have valid data on a read one cycle after the address is valid. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results.

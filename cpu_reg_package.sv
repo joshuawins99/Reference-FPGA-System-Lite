@@ -24,7 +24,7 @@ package cpu_reg_package;
         version_string_e,
         io_e,
         uart_e,
-
+        test_cdc_e,
         // **** Add New Module Entry Here **** //
 
         num_entries
@@ -35,7 +35,8 @@ package cpu_reg_package;
         add_address('h0000, RAM_Size),                       //ram_e
         add_address('h8000, 'h8000+(VersionStringSize-1)*4), //version_string_e
         add_address('h9000, 'h900C),                         //io_e
-        add_address('h9100, 'h9110)                          //uart_e
+        add_address('h9100, 'h9110),                         //uart_e
+        add_address('h9200, 'h9200)                          //test_cdc_e  
 
         // **** Add New Module Addresses Here **** //
     };
