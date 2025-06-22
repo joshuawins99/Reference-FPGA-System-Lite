@@ -10,4 +10,5 @@ rtl/async_fifo/*
 rtl/uart_cpu.sv
 rtl/uart/*
 rtl/bus_cdc_single.sv
+rtl/edge_synchronizer.sv
 rtl/bus_cdc.sv

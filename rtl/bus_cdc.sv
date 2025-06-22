@@ -35,6 +35,7 @@ module bus_cdc #(
     logic [address_width-1:0] cpuside_address;
     logic [data_width-1:0]    cpuside_data_o;
     logic                     cpuside_clk;
+    logic                     moduleside_cpu_reset [num_entries];
 
     assign cpubus_i.cpu_halt_i = |cpu_halt_int[end_num_entry_index:start_num_entry_index];
 
@@ -47,7 +48,7 @@ module bus_cdc #(
     genvar i;
     generate
         for (i = start_num_entry_index; i <= end_num_entry_index; i++) begin : bus_cdc_inst_gen  
-        bus_cdc_single #(
+            bus_cdc_single #(
                 .bus_cdc_start_address  (get_address_start(i)),
                 .bus_cdc_end_address    (get_address_end(i))
             ) bus_cdc_inst (
@@ -62,12 +63,22 @@ module bus_cdc #(
                 .moduleside_address_o   (cpubus_o[i].address_o),
                 .moduleside_we_o        (cpubus_o[i].we_o),
                 .moduleside_data_o      (cpubus_o[i].data_o),
-                .moduleside_cpu_reset_o (cpubus_o[i].cpu_reset_o),
                 .cpuside_module_data_o  (module_data[i])
             );
 
-            assign cpubus_i.data_i[i] = module_data[i];
-            assign cpubus_o[i].clk_i  = cdc_clks_i[i];
+            edge_synchronizer #(
+                .EdgeType               ("Rising"),
+                .PulseWidth             (5)
+            ) cdc_reset_inst (
+                .clk_src_i              (cpuside_clk),
+                .clk_dst_i              (cdc_clks_i[i]),
+                .signal_src_i           (cpuside_cpu_reset),
+                .signal_dst_o           (moduleside_cpu_reset[i])
+            );
+
+            assign cpubus_i.data_i[i]      = module_data[i];
+            assign cpubus_o[i].clk_i       = cdc_clks_i[i];
+            assign cpubus_o[i].cpu_reset_o = moduleside_cpu_reset[i];
         end
     endgenerate
 

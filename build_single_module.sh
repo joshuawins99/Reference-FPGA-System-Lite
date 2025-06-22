@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODELSIM_ROOT_DIR=/root/intelFPGA/20.1/modelsim_ase/bin/
+MODELSIM_ROOT_DIR=/root/QuestaSim/questasim/bin
 
 rm -f ref_fpga_sys_lite.sv
 rm -f *.tar.gz

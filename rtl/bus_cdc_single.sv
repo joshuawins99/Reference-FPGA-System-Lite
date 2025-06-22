@@ -14,12 +14,10 @@ module bus_cdc_single #(
     output logic [data_width-1:0]    moduleside_data_o,
     output logic [address_width-1:0] moduleside_address_o,
     output logic                     moduleside_we_o,
-    output logic                     moduleside_cpu_reset_o,
     output logic [data_width-1:0]    cpuside_module_data_o
 );
 
     typedef struct packed {
-        logic                     reset;
         logic                     we;
         logic [address_width-1:0] address;
         logic [data_width-1:0]    data;
@@ -27,7 +25,6 @@ module bus_cdc_single #(
 
     localparam bundled_signals_width  = $bits(bus_signals_t);
 
-    logic                     cpu_clk;
     logic [address_width-1:0] address_reg               = '0;
     logic                     start_halt                = '0;
     logic                     continue_halt             = '0;
@@ -44,18 +41,15 @@ module bus_cdc_single #(
     bus_signals_t             cpu_signals_in;
     bus_signals_t             cpu_signals_synced;
 
-    assign cpu_clk  = cpuside_clk_i;
-
     //Assign relevant bus signals to synchronize.
     assign cpu_signals_in = '{
-        reset:   cpuside_cpu_reset_i, 
         we:      cpuside_we_i, 
         address: cpuside_address_i, 
         data:    cpuside_data_i
     };
 
     //Register incoming address to determine if its changed.
-    always_ff @(posedge cpu_clk) begin
+    always_ff @(posedge cpuside_clk_i) begin
         address_reg <= cpu_signals_in.address;
     end
 
@@ -80,13 +74,13 @@ module bus_cdc_single #(
         .AREMPTYSIZE (1),
         .FALLTHROUGH ("TRUE")
     ) sync_from_cpu (
-        .wclk        (cpu_clk),
-        .wrst_n      (!cpu_signals_in.reset),
+        .wclk        (cpuside_clk_i),
+        .wrst_n      (!cpuside_cpu_reset_i),
         .winc        (cpu_write_fifo_pulse),
         .wdata       (cpu_signals_in),
         .awfull      (cpu_halt_fifo_in),
         .rclk        (clk_dst_i),
-        .rrst_n      (!cpu_signals_in.reset),
+        .rrst_n      (!cpuside_cpu_reset_i),
         .rinc        (cpu_signals_read_pulse),
         .rdata       (cpu_signals_synced),
         .rempty      (cpu_rempty),
@@ -109,10 +103,9 @@ module bus_cdc_single #(
     assign moduleside_we_o        = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.we      : '0;
     assign moduleside_address_o   = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.address : '0;
     assign moduleside_data_o      = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.data    : '0;
-    assign moduleside_cpu_reset_o = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.reset   : '0;  
 
     //Logic to determine if the transaction is a read. If it is then halt cpu to wait for data.
-    always_ff @(posedge cpu_clk) begin
+    always_ff @(posedge cpuside_clk_i) begin
         start_halt <= 1'b0;
         if (cpu_write_fifo_pulse == 1'b1) begin
             if (cpu_signals_in.we == 1'b0) begin
@@ -144,12 +137,12 @@ module bus_cdc_single #(
         .FALLTHROUGH ("TRUE")
     ) sync_to_cpu (
         .wclk        (clk_dst_i),
-        .wrst_n      (!cpu_signals_in.reset),
+        .wrst_n      (!cpuside_cpu_reset_i),
         .winc        (module_write_fifo_pulse),
         .wdata       (moduleside_data_i),
         .awfull      (),
-        .rclk        (cpu_clk),
-        .rrst_n      (!cpu_signals_in.reset),
+        .rclk        (cpuside_clk_i),
+        .rrst_n      (!cpuside_cpu_reset_i),
         .rinc        (module_signals_read_pulse),
         .rdata       (data_to_cpu_fifo),
         .rempty      (module_rempty),
@@ -166,7 +159,7 @@ module bus_cdc_single #(
     end
 
     //Logic to disable cpu halting after data should be valid.
-    always_ff @(posedge cpu_clk) begin
+    always_ff @(posedge cpuside_clk_i) begin
         if (start_halt == 1'b1) begin
             continue_halt <= 1'b1;
         end
