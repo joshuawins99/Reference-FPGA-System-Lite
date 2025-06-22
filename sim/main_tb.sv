@@ -96,10 +96,11 @@ module main_tb;
     logic cdc_clocks [num_entries];
 
     assign cdc_clocks[test_cdc_e] = clk_cdc;
+    assign cdc_clocks[test_cdc2_e] = clk_cdc;
 
     bus_cdc #(
         .bus_cdc_start_address (get_address_start(test_cdc_e)),
-        .bus_cdc_end_address   (get_address_end(test_cdc_e))
+        .bus_cdc_end_address   (get_address_end(test_cdc2_e))
     ) cdc_1 (
         .cdc_clks_i (cdc_clocks),
         .cpubus_i   (cpubus),
@@ -107,6 +108,7 @@ module main_tb;
     );
 
     logic [data_width-1:0] test_cdc_register = '0;
+    logic [data_width-1:0] test_cdc2_register = '0;
 
     always_ff @(posedge clk_cdc) begin
         if (cdc_cpubus[test_cdc_e].we_o == 1'b1) begin
@@ -129,6 +131,32 @@ module main_tb;
                 end
                 default : begin
                     cdc_cpubus[test_cdc_e].data_i[test_cdc_e] <= '0;
+                end
+            endcase
+        end
+    end
+
+    always_ff @(posedge clk_cdc) begin
+        if (cdc_cpubus[test_cdc2_e].we_o == 1'b1) begin
+            unique case (cdc_cpubus[test_cdc2_e].address_o)
+                get_address_start(test_cdc2_e) : begin
+                    test_cdc2_register <= cdc_cpubus[test_cdc2_e].data_o;
+                end
+                default : begin
+                    test_cdc2_register <= test_cdc2_register;
+                end
+            endcase
+        end
+    end
+
+    always_ff @(posedge clk_cdc) begin
+        if (cdc_cpubus[test_cdc2_e].we_o == 1'b0) begin
+            unique case (cdc_cpubus[test_cdc2_e].address_o)
+                get_address_start(test_cdc2_e) : begin
+                    cdc_cpubus[test_cdc2_e].data_i[test_cdc2_e] <= test_cdc2_register;
+                end
+                default : begin
+                    cdc_cpubus[test_cdc2_e].data_i[test_cdc2_e] <= '0;
                 end
             endcase
         end
@@ -318,7 +346,59 @@ module main_tb;
             if (test_cdc_register != num_recv) begin
                 $display("test_cdc_register: %d", test_cdc_register);
                 $display("msg:               %d", msg);
-                track_errors("CDC Register Write Not Correct!");
+                track_errors("CDC Register Read Not Correct!");
+            end
+        end
+    endtask
+
+    task TestWriteCDCModule2;
+        string msg;  
+        int unsigned input_data;  
+        string to_send;   
+        logic received;   
+        begin   
+            received = 0;
+            input_data = $urandom_range(0,(2**32)-1);
+            to_send = $sformatf("wFPGA,%0d,%0d\n", get_address_start(test_cdc2_e), input_data);
+            SendUARTMessage(to_send);
+            fork
+                begin
+                    wait (cdc_cpubus[test_cdc2_e].address_o == get_address_start(test_cdc2_e));
+                    received = 1;
+                end
+                begin
+                    if (received == 0) begin
+                        repeat(25000000) @(posedge clk_cdc);
+                        track_errors("Write Never Received!");
+                    end
+                end
+            join_any
+            repeat(2) @(posedge clk_cdc);
+            if (test_cdc2_register != input_data) begin
+                $display("test_cdc2_register:  %d", test_cdc2_register);
+                $display("input_data:         %d", input_data);
+                track_errors("CDC2 Register Write Not Correct!");
+            end
+        end
+    endtask
+
+    task TestReadCDCModule2;
+        string msg;  
+        int unsigned input_data;  
+        string to_send;   
+        logic received; 
+        int num_recv;  
+        begin   
+            received = 0;
+            input_data = $urandom_range(0,(2**32)-1);
+            to_send = $sformatf("rFPGA,%0d\n", get_address_start(test_cdc2_e));
+            SendUARTMessage(to_send);
+            RecvUARTMessage(msg);
+            $sscanf(msg, "%d", num_recv);
+            if (test_cdc2_register != num_recv) begin
+                $display("test_cdc2_register: %d", test_cdc2_register);
+                $display("msg:               %d", msg);
+                track_errors("CDC2 Register Read Not Correct!");
             end
         end
     endtask
@@ -344,6 +424,11 @@ module main_tb;
         repeat(10) begin
             TestWriteCDCModule();
             TestReadCDCModule();
+        end
+
+        repeat(10) begin
+            TestWriteCDCModule2();
+            TestReadCDCModule2();
         end
 
         if (error_count >= 1) begin

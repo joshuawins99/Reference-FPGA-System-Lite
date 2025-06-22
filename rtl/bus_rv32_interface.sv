@@ -23,7 +23,7 @@ interface bus_rv32;
         input  we_o,
         input  data_o,
         output irq_i,
-        output cpu_reset_o,
+        input  cpu_reset_o,
         output cpu_halt_i,
         output external_data_i,
         input  external_data_o,
@@ -46,4 +46,24 @@ interface bus_rv32;
         output uart_tx_o,
         input  uart_rx_i
     );
+
+    modport cdc_in (
+        input  clk_i,
+        input  address_o,
+        output data_i,
+        input  we_o,
+        input  data_o,
+        input  cpu_reset_o,
+        output cpu_halt_i
+    );
+
+    modport cdc_out (
+        output clk_i,
+        output address_o,
+        input  data_i,
+        output we_o,
+        output data_o,
+        output cpu_reset_o
+    );
+    
 endinterface

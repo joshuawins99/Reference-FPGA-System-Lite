@@ -1,14 +1,21 @@
 import cpu_reg_package::*;
 module bus_cdc_single #(
     parameter bus_cdc_start_address = 0,
-    parameter bus_cdc_end_address   = 0,
-    parameter EntriesIndex          = 0
+    parameter bus_cdc_end_address   = 0
 )(
-    input logic              clk_dst_i,
-    bus_rv32.from_cpu        cpubus_i,
-    bus_rv32.from_cpu        cpubus_o,
-    output logic             cpu_halt_o,
-    output data_reg_inputs_t module_data_o
+    input  logic                     clk_dst_i,
+    input  logic                     cpuside_clk_i,
+    input  logic                     cpuside_cpu_reset_i,
+    input  logic                     cpuside_we_i,
+    input  logic [address_width-1:0] cpuside_address_i,
+    input  logic [data_width-1:0]    cpuside_data_i,
+    output logic                     cpuside_cpu_halt_o,
+    input  logic [data_width-1:0]    moduleside_data_i,
+    output logic [data_width-1:0]    moduleside_data_o,
+    output logic [address_width-1:0] moduleside_address_o,
+    output logic                     moduleside_we_o,
+    output logic                     moduleside_cpu_reset_o,
+    output logic [data_width-1:0]    cpuside_module_data_o
 );
 
     typedef struct packed {
@@ -32,20 +39,19 @@ module bus_cdc_single #(
     logic                     module_signals_read_pulse = 1'b0;
     logic                     module_write_fifo_pulse   = 1'b0;
     logic                     module_rempty;
-    data_reg_inputs_t         data_to_cpu_fifo;
+    logic [data_width-1:0]    data_to_cpu_fifo;
 
     bus_signals_t             cpu_signals_in;
     bus_signals_t             cpu_signals_synced;
 
-    assign cpu_clk        = cpubus_i.clk_i;
-    assign cpubus_o.clk_i = clk_dst_i;
+    assign cpu_clk  = cpuside_clk_i;
 
     //Assign relevant bus signals to synchronize.
     assign cpu_signals_in = '{
-        reset:   cpubus_i.cpu_reset_o, 
-        we:      cpubus_i.we_o, 
-        address: cpubus_i.address_o, 
-        data:    cpubus_i.data_o
+        reset:   cpuside_cpu_reset_i, 
+        we:      cpuside_we_i, 
+        address: cpuside_address_i, 
+        data:    cpuside_data_i
     };
 
     //Register incoming address to determine if its changed.
@@ -100,10 +106,10 @@ module bus_cdc_single #(
 
     //Pulse bus signals in clk_dst_i domain to act the same as in main clk domain.
     //If not pulsed, will cause erroneous writes into sync_to_cpu fifo.
-    assign cpubus_o.we_o        = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.we      : '0;
-    assign cpubus_o.address_o   = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.address : '0;
-    assign cpubus_o.data_o      = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.data    : '0;
-    assign cpubus_o.cpu_reset_o = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.reset   : '0;  
+    assign moduleside_we_o        = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.we      : '0;
+    assign moduleside_address_o   = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.address : '0;
+    assign moduleside_data_o      = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.data    : '0;
+    assign moduleside_cpu_reset_o = (cpu_signals_read_pulse == 1) ? cpu_signals_synced.reset   : '0;  
 
     //Logic to determine if the transaction is a read. If it is then halt cpu to wait for data.
     always_ff @(posedge cpu_clk) begin
@@ -140,23 +146,22 @@ module bus_cdc_single #(
         .wclk        (clk_dst_i),
         .wrst_n      (!cpu_signals_in.reset),
         .winc        (module_write_fifo_pulse),
-        .wdata       (cpubus_o.data_i[EntriesIndex]),
+        .wdata       (moduleside_data_i),
         .awfull      (),
         .rclk        (cpu_clk),
         .rrst_n      (!cpu_signals_in.reset),
         .rinc        (module_signals_read_pulse),
-        .rdata       (data_to_cpu_fifo[EntriesIndex]),
+        .rdata       (data_to_cpu_fifo),
         .rempty      (module_rempty),
         .arempty     ()
     );
 
     //Ensure that erroneous data isn't fed back into the cpu and only strobe the data when valid. Defaults to 0.
-    //Also ensure no bus conflicts with writing data to the data mux.
     always_comb begin
         if (module_signals_read_pulse == 1'b1) begin
-            module_data_o[EntriesIndex] = data_to_cpu_fifo[EntriesIndex];
+            cpuside_module_data_o = data_to_cpu_fifo;
         end else begin
-            module_data_o[EntriesIndex] = '0;
+            cpuside_module_data_o = '0;
         end
     end
 
@@ -173,6 +178,6 @@ module bus_cdc_single #(
         end
     end
 
-    assign cpu_halt_o = start_halt | continue_halt | cpu_halt_fifo_in;
+    assign cpuside_cpu_halt_o = start_halt | continue_halt | cpu_halt_fifo_in;
 
 endmodule
