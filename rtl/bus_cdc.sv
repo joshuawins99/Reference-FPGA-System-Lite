@@ -43,11 +43,11 @@ module bus_cdc #(
     logic                     moduleside_cpu_reset [num_entries];
     logic [address_width-1:0] address_reg = '0;
     bus_signals_t             data_cpu_to_module;
-    logic [num_entries-1:0]   data_cpu_to_module_valid;
+    logic [num_entries-1:0]   data_cpu_to_module_valid = '0;
     bus_signals_t             data_cpu_to_module_synced [num_entries];
     logic                     data_cpu_to_module_synced_valid [num_entries];
     bus_signals_t             data_module_to_cpu [num_entries];
-    logic [num_entries-1:0]   data_module_to_cpu_valid;
+    logic [num_entries-1:0]   data_module_to_cpu_valid = '0;
     bus_signals_t             data_module_to_cpu_synced [num_entries];
     logic [num_entries-1:0]   data_module_to_cpu_synced_valid;
     logic [num_entries-1:0]   read_pending = '0;
