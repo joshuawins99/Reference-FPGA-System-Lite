@@ -236,7 +236,7 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             "uart_clk_div",
             "uart_debouncer",
             "bus_rv32",
-            "bus_cdc_single",
+            "bus_cdc_bridge",
             "edge_synchronizer",
             "bus_cdc"
         }

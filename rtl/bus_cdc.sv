@@ -25,46 +25,101 @@ module bus_cdc #(
         end
     endfunction
 
+    typedef struct packed {
+        logic                     we;
+        logic [address_width-1:0] address;
+        logic [data_width-1:0]    data;
+    } bus_signals_t;
+
     localparam start_num_entry_index  = reverse_index_lookup(bus_cdc_start_address);
     localparam end_num_entry_index    = reverse_index_lookup(bus_cdc_end_address);
 
-    logic [num_entries-1:0]   cpu_halt_int;
-    data_reg_inputs_t         module_data;
+    logic [num_entries-1:0]   busy_src;
     logic                     cpuside_cpu_reset;
     logic                     cpuside_we;
     logic [address_width-1:0] cpuside_address;
     logic [data_width-1:0]    cpuside_data_o;
     logic                     cpuside_clk;
     logic                     moduleside_cpu_reset [num_entries];
-
-    assign cpubus_i.cpu_halt_i = |cpu_halt_int[end_num_entry_index:start_num_entry_index];
+    logic [address_width-1:0] address_reg = '0;
+    bus_signals_t             data_cpu_to_module;
+    logic [num_entries-1:0]   data_cpu_to_module_valid;
+    bus_signals_t             data_cpu_to_module_synced [num_entries];
+    logic                     data_cpu_to_module_synced_valid [num_entries];
+    bus_signals_t             data_module_to_cpu [num_entries];
+    logic [num_entries-1:0]   data_module_to_cpu_valid;
+    bus_signals_t             data_module_to_cpu_synced [num_entries];
+    logic [num_entries-1:0]   data_module_to_cpu_synced_valid;
+    logic [num_entries-1:0]   read_pending = '0;
 
     assign cpuside_cpu_reset   = cpubus_i.cpu_reset_o;
-    assign cpuside_we          = cpubus_i.we_o;
-    assign cpuside_address     = cpubus_i.address_o;
-    assign cpuside_data_o      = cpubus_i.data_o;
     assign cpuside_clk         = cpubus_i.clk_i;
+
+    assign data_cpu_to_module = '{
+        we:      cpubus_i.we_o, 
+        address: cpubus_i.address_o, 
+        data:    cpubus_i.data_o
+    };
+
+    assign cpubus_i.cpu_halt_i = |(read_pending[end_num_entry_index:start_num_entry_index]) | |(busy_src[end_num_entry_index:start_num_entry_index]);
+
+    //Register incoming address to determine if its changed.
+    always_ff @(posedge cpuside_clk) begin
+        address_reg <= data_cpu_to_module.address;
+    end
 
     genvar i;
     generate
         for (i = start_num_entry_index; i <= end_num_entry_index; i++) begin : bus_cdc_inst_gen  
-            bus_cdc_single #(
-                .bus_cdc_start_address  (get_address_start(i)),
-                .bus_cdc_end_address    (get_address_end(i))
+            //Determine when an address is within the bounds specified and if so put into fifo.
+            always_comb begin
+                if (data_cpu_to_module.address >= get_address_start(i) && data_cpu_to_module.address <= get_address_end(i)) begin
+                    if (data_cpu_to_module.address != address_reg) begin
+                        data_cpu_to_module_valid[i] = 1'b1;
+                    end else begin
+                        data_cpu_to_module_valid[i] = 1'b0;
+                    end
+                end else begin
+                    data_cpu_to_module_valid[i] = 1'b0;
+                end
+            end
+
+            //Register data_module_to_cpu_valid because module is expected to have valid data one clock cycle later.
+            always_ff @(posedge cdc_clks_i[i]) begin
+                data_module_to_cpu_valid[i] <= !data_cpu_to_module_synced[i].we & data_cpu_to_module_synced_valid[i];
+            end
+
+            bus_cdc_bridge #(
+                .DataWidth              ($bits(bus_signals_t))
             ) bus_cdc_inst (
+                .clk_src_i              (cpuside_clk),
+                .reset_i                (cpuside_cpu_reset),
+                .data_src_i             (data_cpu_to_module),
+                .data_src_valid_i       (data_cpu_to_module_valid[i]),
+                .data_src_o             (data_module_to_cpu_synced[i]),
+                .data_src_o_valid_o     (data_module_to_cpu_synced_valid[i]),
+                .busy_src_o             (busy_src[i]),
                 .clk_dst_i              (cdc_clks_i[i]),
-                .cpuside_clk_i          (cpuside_clk),
-                .cpuside_cpu_reset_i    (cpuside_cpu_reset),
-                .cpuside_we_i           (cpuside_we),
-                .cpuside_address_i      (cpuside_address),
-                .cpuside_data_i         (cpuside_data_o),
-                .cpuside_cpu_halt_o     (cpu_halt_int[i]),
-                .moduleside_data_i      (cpubus_o[i].data_i[i]),
-                .moduleside_address_o   (cpubus_o[i].address_o),
-                .moduleside_we_o        (cpubus_o[i].we_o),
-                .moduleside_data_o      (cpubus_o[i].data_o),
-                .cpuside_module_data_o  (module_data[i])
+                .data_dst_i             (data_module_to_cpu[i]),
+                .data_dst_valid_i       (data_module_to_cpu_valid[i]),
+                .data_dst_o             (data_cpu_to_module_synced[i]),
+                .data_dst_o_valid_o     (data_cpu_to_module_synced_valid[i]),
+                .busy_dst_o             ()
             );
+
+            //Handle halting of cpu in order to wait for data from a downstream module to return back to cpu domain.
+            always_ff @(posedge cpuside_clk) begin
+                if (cpuside_cpu_reset == 1'b0) begin
+                    if (data_cpu_to_module_valid[i] == 1'b1 && data_cpu_to_module.we == 1'b0) begin
+                        read_pending[i] <= 1'b1;
+                    end
+                    if (data_module_to_cpu_synced_valid[i] == 1'b1) begin
+                        read_pending[i] <= 1'b0;
+                    end
+                end else begin
+                    read_pending[i] <= 1'b0;
+                end
+            end
 
             edge_synchronizer #(
                 .EdgeType               ("Rising"),
@@ -76,9 +131,23 @@ module bus_cdc #(
                 .signal_dst_o           (moduleside_cpu_reset[i])
             );
 
-            assign cpubus_i.data_i[i]      = module_data[i];
-            assign cpubus_o[i].clk_i       = cdc_clks_i[i];
-            assign cpubus_o[i].cpu_reset_o = moduleside_cpu_reset[i];
+            //Register output of data to the cpu in order to have the data valid when the halt lifts.
+            always_ff @(posedge cpuside_clk) begin
+                cpubus_i.data_i[i] <= data_module_to_cpu_synced[i].data;
+            end
+
+            assign data_module_to_cpu[i].data    = cpubus_o[i].data_i[i];
+            assign data_module_to_cpu[i].address = '0;
+            assign data_module_to_cpu[i].we      = '0;
+
+            assign cpubus_o[i].clk_i             = cdc_clks_i[i];
+            assign cpubus_o[i].cpu_reset_o       = moduleside_cpu_reset[i];
+
+            //Pulse bus signals in clk_dst_i domain to act the same as in main clk domain.
+            //If not pulsed, will cause erroneous writes into sync_to_cpu fifo.
+            assign cpubus_o[i].data_o            = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].data : '0;
+            assign cpubus_o[i].address_o         = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].address : '0;
+            assign cpubus_o[i].we_o              = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].we : '0;
         end
     endgenerate
 
