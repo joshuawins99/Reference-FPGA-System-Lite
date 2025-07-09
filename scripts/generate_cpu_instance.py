@@ -334,11 +334,14 @@ def get_c_code_folders(parsed_configs):
 directory_path = "."
 build_script = "build_single_module.sh"
 
-folders = list_folders(directory_path)
+#folders = list_folders(directory_path)
 #print(folders)
 
 config_files = check_config_files(directory_path)
 #print(config_files)
+
+filtered_dirs = [dir_name for dir_name in config_files if config_files.get(dir_name)]
+#print(filtered_dirs)
 
 parsed_configs = process_configs(directory_path)
 #print(parsed_configs)
@@ -350,7 +353,7 @@ default_c_code_path = "C_Code"  #Default Folder
 
 if "--build" in sys.argv:
     absolute_path = os.path.abspath(".")
-    for cpu_name in folders:
+    for cpu_name in filtered_dirs:
         config_folder = c_code_folders.get(cpu_name)
         build_folder = (
             os.path.join(absolute_path, cpu_name, config_folder)
