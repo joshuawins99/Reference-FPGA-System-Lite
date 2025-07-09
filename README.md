@@ -41,6 +41,9 @@ Now create a config file named cpu_config.txt and place it in the cpu_test folde
 #Modules follow enumeration name : Enable TRUE/FALSE : Address Bounds
 #Place extra modules not included by default in USER_MODULES
 
+CONFIG_PARAMETERS:
+    #C_Code_Folder : C_Code
+
 BUILTIN_PARAMETERS:
     FPGAClkSpeed : 40000000,
     BaudRateCPU : 230400,
@@ -65,6 +68,8 @@ Run the python script to generate the module and package file:
 ```bash
 python3 generate_cpu_instance.py
 ```
+Optionally, under the CONFIG_PARAMETERS section is the C_Code_Folder variable. This variable is used when running the generate_cpu_instance.py script with the ``--build`` flag. This allows the python script to both build and place the output files in the correct directory. Multiple unique instances of this system can be used in a single project easily this way. This option will call the build_single_module.sh for each instance of config file automatically so the script itself doesn't have to be run if using it this way.
+
 An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32:
 ```Verilog
 import cpu_test_package::*;

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import os
 import re
+import sys
+import subprocess
 
 def list_folders(directory):
     """Returns a list of folders in the given directory."""
@@ -28,8 +30,8 @@ def parse_config(file_path):
             # Match section headers
             section_match = re.match(r"(\w+):", line)
 
-            # Match parameters with optional bit-width (New format with ':' separator)
-            param_match = re.match(r"(\w+)\s*:\s*([\w\d\+\-]+|'h[\w\d\+\-]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
+            # Match parameters with optional bit-width
+            param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
 
             # Match module entries with flags and bounds
             module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}", line)
@@ -38,21 +40,29 @@ def parse_config(file_path):
                 current_section = section_match.group(1)
                 config_data.setdefault(current_section, {})
 
-            elif param_match and current_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            elif param_match and current_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS", "CONFIG_PARAMETERS"]:
                 key = param_match.group(1)
-                value = param_match.group(2)
-                bit_width = param_match.group(3)  # Optional bit-width
+                value = param_match.group(2).rstrip(",")
+                bit_width = param_match.group(3)
 
                 if bit_width:
-                    config_data[current_section][key] = {"value": value, "bit_width": bit_width}
+                    config_data[current_section][key] = {
+                        "value": value,
+                        "bit_width": bit_width
+                    }
                 else:
-                    config_data[current_section][key] = {"value": value}
+                    config_data[current_section][key] = {
+                        "value": value
+                    }
 
             elif module_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
                 key = module_match.group(1)
-                flag = module_match.group(2)  # TRUE or FALSE
-                bounds = [b.strip() for b in module_match.group(3).split(",")]
-                config_data[current_section][key] = {"flag": flag, "bounds": bounds}
+                flag = module_match.group(2)
+                bounds = [b.strip().rstrip(",") for b in module_match.group(3).split(",")]
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "bounds": bounds
+                }
 
     return config_data
 
@@ -199,7 +209,7 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 
 def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_fpga_sys_lite.sv"):
     """Reads a reference SystemVerilog file, replaces import statements and updates bus logic based on enabled modules."""
-    reference_file = os.path.join(current_directory, "ref_fpga_sys_lite.sv")
+    reference_file = os.path.join(current_directory, reference_file)
     if not os.path.exists(reference_file):
         print(f"Error: Reference file '{reference_file}' not found.")
         return
@@ -309,8 +319,21 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
         print(f"Saved SystemVerilog Module file: {output_file}")
 
 
+def get_c_code_folders(parsed_configs):
+    """Extracts C_CODE_FOLDER values from the parsed configs if present."""
+    c_folders = {}
+    for cpu_name, config in parsed_configs.items():
+        for section in ["CONFIG_PARAMETERS"]:
+            params = config.get(section, {})
+            folder_info = params.get("C_Code_Folder")
+            if folder_info:
+                c_folders[cpu_name] = folder_info["value"]
+    return c_folders
+
 # Example usage:
 directory_path = "."
+build_script = "build_single_module.sh"
+
 folders = list_folders(directory_path)
 #print(folders)
 
@@ -320,8 +343,37 @@ config_files = check_config_files(directory_path)
 parsed_configs = process_configs(directory_path)
 #print(parsed_configs)
 
+c_code_folders = get_c_code_folders(parsed_configs)
+#print(c_code_folders)
+
+default_c_code_path = "C_Code"  #Default Folder
+
+if "--build" in sys.argv:
+    absolute_path = os.path.abspath(".")
+    for cpu_name in folders:
+        config_folder = c_code_folders.get(cpu_name)
+        build_folder = (
+            os.path.join(absolute_path, cpu_name, config_folder)
+            if config_folder
+            else os.path.join(directory_path, default_c_code_path)
+        )
+        parent_directory = os.path.dirname(current_directory)
+        print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
+        try:
+            result = subprocess.run(["bash", build_script, "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
+            print(result.stdout + result.stderr)
+        except FileNotFoundError:
+            print(f"Build folder not found for {cpu_name}: {build_folder}")
+
+        curr_config_dict = {cpu_name: parsed_configs.get(cpu_name)}
+        save_systemverilog_files(curr_config_dict, directory_path)
+        update_cpu_modules_file(curr_config_dict, directory_path, reference_file="../ref_fpga_sys_lite.sv")
+        subprocess.run(["bash", "-c", "git clean -fdx"], cwd=parent_directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+else:
+    save_systemverilog_files(parsed_configs, directory_path)
+    update_cpu_modules_file(parsed_configs, directory_path)
+
+
 #systemverilog_output = generate_systemverilog(parsed_configs)
 #print(systemverilog_output)
-
-save_systemverilog_files(parsed_configs, directory_path)
-update_cpu_modules_file(parsed_configs, directory_path)
