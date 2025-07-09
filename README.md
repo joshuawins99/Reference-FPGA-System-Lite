@@ -21,6 +21,8 @@ Run the build_single_module.sh script:
 ```
 This should generate a file named ref_fpga_sys_lite.sv. This file along with scripts/generate_cpu_instance.py make up the complete system. Copy these two files into your project to use. A config file must also be provided. Details below.
 
+There is also a ```--c-folder``` option to the build_single_module.sh script. This allows the use of custom C code. Add the folder path to the C code after the option flag.
+
 Release builds can be found in the releases section.
 
 ## How do I use it?

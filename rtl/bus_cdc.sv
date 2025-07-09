@@ -133,7 +133,11 @@ module bus_cdc #(
 
             //Register output of data to the cpu in order to have the data valid when the halt lifts.
             always_ff @(posedge cpuside_clk) begin
-                cpubus_i.data_i[i] <= data_module_to_cpu_synced[i].data;
+                if (data_module_to_cpu_synced_valid[i] == 1'b1) begin
+                    cpubus_i.data_i[i] <= data_module_to_cpu_synced[i].data;
+                end else begin
+                    cpubus_i.data_i[i] <= '0;
+                end
             end
 
             assign data_module_to_cpu[i].data    = cpubus_o[i].data_i[i];
