@@ -1,7 +1,8 @@
 module cpu_rv32 #(
     parameter ProgramStartAddress = 0,
     parameter StackAddress        = 0,
-    parameter address_width       = 32
+    parameter address_width       = 32,
+    parameter EnableCPUIRQ        = 0
 )(
     input  logic                     clk_i,
     input  logic                     reset_i,
@@ -44,13 +45,32 @@ module cpu_rv32 #(
         end
     end
 
+    logic irq;
+    logic irq_asserted = 1'b0;
+
+    always_ff @(posedge clk_i) begin
+        irq <= '0;
+        if (irq_i == 1'b1 && irq_asserted == 0) begin
+            irq_asserted <= 1'b1;
+            irq <= '1;
+        end
+        if (irq_i == 1'b0) begin
+            irq_asserted <= 1'b0;
+        end
+    end
+
+    `ifdef SIM
+        `define CPUIRQAddress 32'h00000000
+    `endif
+
     picorv32 #(
         .PROGADDR_RESET       (ProgramStartAddress),
-        .PROGADDR_IRQ         (32'h0000_0000),
+        .PROGADDR_IRQ         (`CPUIRQAddress),
         .STACKADDR            (StackAddress),
+        .ENABLE_IRQ_TIMER     (0),
         .COMPRESSED_ISA       (0),
         .ENABLE_IRQ_QREGS     (0),
-        .ENABLE_IRQ           (0),
+        .ENABLE_IRQ           (EnableCPUIRQ),
         .REGS_INIT_ZERO       (1),
         .TWO_STAGE_SHIFT      (1), //Set to 0 for space savings
         .ENABLE_REGS_DUALPORT (1) //Set to 0 for space savings
@@ -64,7 +84,7 @@ module cpu_rv32 #(
         .mem_valid (mem_valid),
         .mem_instr (),
         .mem_ready (mem_ready),
-        .irq       (irq_i)
+        .irq       ({irq, 31'b0})
     );
 
     always_comb begin
@@ -101,4 +121,3 @@ module cpu_rv32 #(
     assign we_ram_o = mem_wstrb;
 
 endmodule
-

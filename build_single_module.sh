@@ -66,6 +66,19 @@ cd ..
 scripts/create_memory_module.py mem_init.mem rtl/picosoc_mem.v
 scripts/concatenate_modules.sh cpu_system_filelist.txt ref_fpga_sys_lite.sv
 
+irq_result=$(nm rv32_gcc/a.elf | grep -w irq | awk '{print $1}')
+
+if [ -n "$irq_result" ]; then
+    echo "Found IRQ Function at: 0x$irq_result"
+    echo "\`define CPUIRQAddress 32'h$irq_result" > irq.sv
+else
+    echo "No IRQ Function Found"
+    echo "\`define CPUIRQAddress 32'h00000000" > irq.sv
+fi
+
+cat ref_fpga_sys_lite.sv >> irq.sv
+mv irq.sv ref_fpga_sys_lite.sv
+
 if [ "$BUILD_MODE" = true ] && [ "$VERSION_TYPE" = REL ]; then
     cd sim
     $MODELSIM_ROOT_DIR/vsim -c -do main_tb.do >> ../sim_result.txt

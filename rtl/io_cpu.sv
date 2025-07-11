@@ -22,6 +22,7 @@ module io_cpu #(
     localparam IRQ_Clear                = BaseAddress + (3*Address_Wording);
 
     logic [data_width-1:0] external_inputs_reg;
+    logic [data_width-1:0] external_inputs_reg_prev;
     logic [data_width-1:0] external_outputs_reg;
     logic [data_width-1:0] input_irq_mask_reg = '0;
     logic [data_width-1:0] irq_reg = '0;
@@ -86,8 +87,9 @@ module io_cpu #(
     end
 
     always_ff @(posedge clk_i) begin //IRQ
+        external_inputs_reg_prev <= external_inputs_reg;
         if (reset_i == 1'b0) begin
-            if ((external_inputs_reg & input_irq_mask_reg) != 0) begin
+            if (((external_inputs_reg & ~external_inputs_reg_prev) & input_irq_mask_reg) != 0) begin
                 irq_reg <= external_inputs_reg & input_irq_mask_reg;
                 irq_o <= 1'b1;
             end else if (address_i == IRQ_Clear && rd_wr_i == 1'b0) begin

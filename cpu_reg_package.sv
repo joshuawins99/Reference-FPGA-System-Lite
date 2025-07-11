@@ -7,6 +7,7 @@ package cpu_reg_package;
     localparam              RAM_Size                   = 10240;
     localparam logic [31:0] Program_CPU_Start_Address  = 32'h0;
     localparam              VersionStringSize          = 64;
+    localparam              EnableCPUIRQ               = 0;
 
     function [(2*address_width)-1:0] add_address (
         input logic [address_width-1:0] start_address,

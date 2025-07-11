@@ -1509,6 +1509,9 @@ module picorv32 #(
                         mem_do_rinst <= 1;
                     end
                     ENABLE_IRQ && irq_state[1]: begin
+                        if (ENABLE_IRQ_QREGS == 0) begin
+                            irq_active <= 0;
+                        end
                         eoi <= irq_pending & ~irq_mask;
                         next_irq_pending = next_irq_pending & irq_mask;
                     end

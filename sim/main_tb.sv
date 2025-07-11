@@ -57,7 +57,7 @@ module main_tb;
         .cpu_data_o      (cpu_data_o),
         .cpu_data_i      (cpu_data_i),
         .cpu_halt_i      (cpu_halt_i),
-        .irq             ('0),
+        .irq_i           ('0),
         .cpu_we_o        (we_o)
     );
 

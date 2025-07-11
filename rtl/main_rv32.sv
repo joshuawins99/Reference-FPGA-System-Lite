@@ -11,7 +11,7 @@ module main_rv32 (
     input  logic                     cpu_halt_i,
     output logic                     cpu_we_o,
     output logic [3:0]               we_ram_o,
-    input  logic                     irq,
+    input  logic                     irq_i,
     output logic [address_width-1:0] address,
     output logic [data_width-1:0]    external_data_o,
     input  logic [data_width-1:0]    external_data_i,
@@ -27,7 +27,7 @@ module main_rv32 (
     logic [data_width-1:0]    cpu_data_o;
     logic                     cpu_we_o;
     logic [3:0]               we_ram_o;
-    logic                     irq;
+    logic                     irq_i;
     logic [address_width-1:0] address;
     logic                     cpu_halt_i;
 
@@ -48,7 +48,7 @@ module main_rv32 (
 `ifndef SIM
     assign clk_i                     = cpubus.clk_i;
     assign reset_i                   = cpubus.reset_i;
-    assign irq                       = cpubus.irq_i;
+    assign irq_i                     = cpubus.irq_i;
     assign cpubus.data_o             = cpu_data_o;
     assign data_reg_inputs_interface = cpubus.data_i;
     assign cpubus.we_o               = cpu_we_o;
@@ -60,6 +60,9 @@ module main_rv32 (
     assign uart_rx_i                 = cpubus.uart_rx_i;
     assign cpubus.uart_tx_o          = uart_tx_o;
 `endif
+
+    logic irq_io;
+    logic irq_combined;
 
 //******************************************* Data Registers and Mux *******************************************
     logic [data_width-1:0]      data_reg;  
@@ -112,10 +115,19 @@ module main_rv32 (
         end
     end
 
+    always_comb begin
+        if (EnableCPUIRQ == 1) begin
+            irq_combined = irq_i | irq_io;
+        end else begin
+            irq_combined = 0;
+        end
+    end
+
     cpu_rv32 #(
         .ProgramStartAddress (Program_CPU_Start_Address),
         .StackAddress        (),
-        .address_width       (address_width)
+        .address_width       (address_width),
+        .EnableCPUIRQ        (EnableCPUIRQ)
     ) cpu1 (
         .clk_i      (clk_i),
         .reset_i    (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
@@ -125,7 +137,7 @@ module main_rv32 (
         .data_o     (cpu_data_o),
         .we_o       (cpu_we_o),
         .we_ram_o   (we_ram_o),
-        .irq_i      (irq)
+        .irq_i      (irq_combined)
     );
 
     bram_contained_rv32 #(
@@ -173,7 +185,7 @@ module main_rv32 (
         .ex_data_i       (external_data_i),
         .ex_data_o       (external_data_o),
         .rd_wr_i         (cpu_we_o),
-        .irq_o           ()
+        .irq_o           (irq_io)
     );
 
     uart_cpu #(

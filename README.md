@@ -51,7 +51,8 @@ BUILTIN_PARAMETERS:
     data_width : 32,
     RAM_Size : 10240,
     Program_CPU_Start_Address : 'h0 : {31:0},
-    VersionStringSize : 64
+    VersionStringSize : 64,
+    EnableCPUIRQ : 0
     
 USER_PARAMETERS:
     
