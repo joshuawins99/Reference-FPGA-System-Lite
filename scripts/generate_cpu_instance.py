@@ -237,6 +237,7 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             "async_fifo",
             "sync_r2w",
             "sync_w2r",
+            "sync_ptr",
             "wptr_full",
             "fifomem",
             "rptr_empty",
