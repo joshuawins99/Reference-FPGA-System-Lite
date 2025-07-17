@@ -367,53 +367,53 @@ def get_c_code_folders(parsed_configs):
 def resolve_expression(expr, parameter_table=None):
     expr = str(expr).strip()
 
-    # Replace parameters
-    if parameter_table:
-        for param, val in parameter_table.items():
-            expr = expr.replace(param, str(val))
-
-    # Replace SystemVerilog-style literals
+    # Convert SystemVerilog-style literals (e.g. 16'h4000, 8'd255, 32'b101010)
     def sv_number_to_python(match):
         raw = match.group(0)
-        # Strip bit-width if present
-        if "'" in raw:
-            _, radix_value = raw.split("'")
-            radix = radix_value[0].lower()
-            value = radix_value[1:]
+        try:
+            if "'" in raw:
+                _, radix_value = raw.split("'")
+                radix = radix_value[0].lower()
+                value = radix_value[1:].replace("_", "")  # Remove underscores
+                if radix == 'h':
+                    return str(int(value, 16))
+                elif radix == 'd':
+                    return str(int(value, 10))
+                elif radix == 'b':
+                    return str(int(value, 2))
+                elif radix == 'o':
+                    return str(int(value, 8))
+        except Exception:
+            print(f"[WARN] Could not parse SV literal: {raw}")
+        return raw  # fallback
 
-            # Convert based on radix
-            if radix == 'h':
-                return str(int(value, 16))
-            elif radix == 'd':
-                return str(int(value, 10))
-            elif radix == 'b':
-                return str(int(value, 2))
-            elif radix == 'o':
-                return str(int(value, 8))
-        return raw  # fallback if malformed
-
-    # Replace all SV-style constants
+    # Replace SV literals before parameter substitution
     expr = re.sub(r"\d*'[hdbonHDBON][0-9a-fA-F_]+", sv_number_to_python, expr)
 
-    # Clean underscore digits (e.g., 16'hDE_AD_BE_EF)
-    expr = expr.replace("_", "")
+    # Replace parameters using token-aware substitution
+    if parameter_table:
+        # Longer names first to prevent partial collisions
+        for param in sorted(parameter_table.keys(), key=lambda p: -len(p)):
+            val = str(parameter_table[param])
+            expr = re.sub(rf"\b{re.escape(param)}\b", val, expr)
 
+    # Evaluate arithmetic expression
     try:
-        return eval(expr, {"__builtins__": None}, {})
+        result = eval(expr, {"__builtins__": None}, {})
+        return result
     except Exception:
         print(f"[WARN] Could not evaluate expression: {expr}")
         return None
 
 def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
     """
-    Assigns memory addresses to modules marked with 'auto': True using aligned placement,
-    while avoiding overlap with existing bounds—evaluating symbolic expressions correctly.
+    Assigns memory addresses to modules with 'auto': True using BaseAddress and overlap avoidance.
+    Handles symbolic expressions and scans forward from BaseAddress using proper masking.
     """
-    
-    def find_free_address(used_ranges, needed_size):
-        addr = 0x0000
+
+    def find_free_address(used_ranges, needed_size, start_from=0x0000):
+        addr = (start_from + alignment - 1) & ~(alignment - 1)
         while True:
-            addr = (addr + alignment - 1) & ~(alignment - 1)
             end_addr = addr + needed_size - 1
             overlap = any(not (end_addr < s or addr > e) for s, e in used_ranges)
             if not overlap:
@@ -421,13 +421,13 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
             addr += alignment
 
     for cpu_name, cpu_config in parsed_configs.items():
-        # Build parameter table for expression resolution
+        # Step 1: Build parameter table
         parameter_table = {}
         for param_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
-            for param_name, param_data in cpu_config.get(param_section, {}).items():
-                val = param_data.get("value")
+            for name, data in cpu_config.get(param_section, {}).items():
+                val = data.get("value")
                 try:
-                    parameter_table[param_name] = (
+                    parameter_table[name] = (
                         int(val.replace("'h", ""), 16)
                         if isinstance(val, str) and val.startswith("'h")
                         else int(val)
@@ -435,11 +435,29 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                 except Exception:
                     continue
 
-        used_ranges = []
+        global_mask = []  # Tracks all used address ranges globally
 
-        # Collect all bounds from both BUILTIN and USER modules
+        # Step 2: Process sections independently
         for section_name in ["BUILTIN_MODULES", "USER_MODULES"]:
-            for mod_name, mod in cpu_config.get(section_name, {}).items():
+            section = cpu_config.get(section_name, {})
+            if not isinstance(section, dict):
+                continue
+
+            # Step 3: Resolve section BaseAddress
+            base_expr = section.get("BaseAddress")
+            try:
+                section_ptr = (
+                    resolve_expression(base_expr, parameter_table)
+                    if base_expr else 0x0000
+                )
+                section_ptr = (section_ptr + alignment - 1) & ~(alignment - 1)
+            except Exception:
+                print(f"[WARN] Could not resolve BaseAddress for {section_name}")
+                section_ptr = 0x0000
+
+            # Step 4: Build local address mask for this section
+            local_mask = []
+            for mod_name, mod in section.items():
                 if mod_name == "BaseAddress" or not isinstance(mod, dict):
                     continue
                 bounds = mod.get("bounds")
@@ -447,33 +465,53 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                     try:
                         start = resolve_expression(bounds[0], parameter_table)
                         end = resolve_expression(bounds[1], parameter_table)
-                        used_ranges.append((start, end))
+                        if start is not None and end is not None:
+                            local_mask.append((start, end))
+                            global_mask.append((start, end))
+                        else:
+                            print(f"[WARN] Skipping unresolved bounds for {mod_name}: {bounds}")
                     except Exception:
                         print(f"[WARN] Could not resolve bounds for {mod_name}: {bounds}")
 
-        # Assign addresses to auto modules
-        for section_name in ["BUILTIN_MODULES", "USER_MODULES"]:
-            section = cpu_config.get(section_name, {})
+            # Step 5: Assign auto modules
             for mod_name, mod in section.items():
                 if mod_name == "BaseAddress" or not isinstance(mod, dict):
                     continue
                 if mod.get("flag") == "TRUE" and mod.get("auto", False):
-                    #reg_count = mod.pop("registers", None)
                     raw_reg_count = str(mod.pop("registers", None))
-                    reg_count = int(resolve_expression(raw_reg_count, parameter_table))
-                    #print(reg_count)
-                    mod.pop("auto", None)
+                    try:
+                        reg_count = int(resolve_expression(raw_reg_count, parameter_table))
+                    except Exception:
+                        print(f"[WARN] Failed to resolve register count for {mod_name}")
+                        continue
 
-                    if not isinstance(reg_count, int) or reg_count < 1:
-                        print(f"[WARN] Invalid register count in {mod_name}")
+                    mod.pop("auto", None)
+                    if reg_count < 1:
+                        print(f"[WARN] Invalid register count for {mod_name}")
                         continue
 
                     needed_size = reg_count * reg_width_bytes
-                    start_addr = find_free_address(used_ranges, needed_size)
+                    start_addr = find_free_address(global_mask + local_mask, needed_size, section_ptr)
                     end_addr = start_addr + (reg_count - 1) * reg_width_bytes
 
                     mod["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
-                    used_ranges.append((start_addr, end_addr))
+
+                    #print(f"\n[DEBUG] Attempting to assign '{mod_name}'")
+                    #print(f"[DEBUG] Raw registers: {raw_reg_count}")
+                    #print(f"[DEBUG] Resolved register count: {reg_count}")
+                    #print(f"[DEBUG] Needed size: {needed_size}")
+                    #print(f"[DEBUG] Starting from section BaseAddress: 0x{section_ptr:X}")
+                    #print(f"[DEBUG] Global mask: {[f'{s:#06X}-{e:#06X}' for s, e in global_mask]}")
+                    #print(f"[DEBUG] Local mask: {[f'{s:#06X}-{e:#06X}' for s, e in local_mask]}")
+
+                    # Track new range
+                    local_mask.append((start_addr, end_addr))
+                    global_mask.append((start_addr, end_addr))
+                    section_ptr = end_addr + 1
+                    #print(f"[DEBUG] Assigned bounds for '{mod_name}': {mod['bounds']}")
+
+            # Step 6: Clean up BaseAddress
+            section.pop("BaseAddress", None)
 
 def dump_all_registers_from_configs(parsed_configs, save_to_file=False, file_path="all_cpu_registers.txt", reg_width_bytes=4, user_modules_only=False):
     """
