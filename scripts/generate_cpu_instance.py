@@ -687,7 +687,7 @@ if "--build" in sys.argv:
         parent_directory = os.path.dirname(current_directory)
         print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
         try:
-            if "--gen-header" in sys.argv:
+            if "--gen-headers" in sys.argv:
                 if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
                     os.remove(f"{build_folder}/{cpu_name}_registers.h")
                 print(f"Moved header {cpu_name}/{cpu_name}_registers.h to {build_folder}\n")
