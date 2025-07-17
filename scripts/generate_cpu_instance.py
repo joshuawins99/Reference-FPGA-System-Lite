@@ -461,7 +461,7 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                     #reg_count = mod.pop("registers", None)
                     raw_reg_count = str(mod.pop("registers", None))
                     reg_count = int(resolve_expression(raw_reg_count, parameter_table))
-                    print(reg_count)
+                    #print(reg_count)
                     mod.pop("auto", None)
 
                     if not isinstance(reg_count, int) or reg_count < 1:
