@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import subprocess
+import shutil
 
 def list_folders(directory):
     """Returns a list of folders in the given directory."""
@@ -28,7 +29,8 @@ def parse_config(file_path):
                 continue
 
             # Match section headers
-            section_match = re.match(r"(\w+):", line)
+            #section_match = re.match(r"(\w+):", line)
+            section_match = re.match(r"^(\w+):\s*(.*)?$", line)
 
             # Match parameters with optional bit-width
             param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
@@ -36,9 +38,17 @@ def parse_config(file_path):
             # Match module entries with flags and bounds
             module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}", line)
 
+            # Match AUTO keyword (e.g. AUTO : 4)
+            auto_module_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}", line)
+            auto_module_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)", line)
+
             if section_match:
                 current_section = section_match.group(1)
                 config_data.setdefault(current_section, {})
+                remainder = section_match.group(2).strip() if section_match.group(2) else ""
+                # If there's something after the colon, it's a BaseAddress
+                if remainder:
+                    config_data[current_section]["BaseAddress"] = remainder
 
             elif param_match and current_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS", "CONFIG_PARAMETERS"]:
                 key = param_match.group(1)
@@ -54,6 +64,26 @@ def parse_config(file_path):
                     config_data[current_section][key] = {
                         "value": value
                     }
+            
+            elif auto_module_expr_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                key = auto_module_expr_match.group(1)
+                flag = auto_module_expr_match.group(2)
+                reg_count = auto_module_expr_match.group(3)
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count
+                }
+
+            elif auto_module_literal_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                key = auto_module_literal_match.group(1)
+                flag = auto_module_literal_match.group(2)
+                reg_count = int(auto_module_literal_match.group(3))
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count
+                }
 
             elif module_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
                 key = module_match.group(1)
@@ -95,7 +125,11 @@ def generate_systemverilog(config):
 
     # Combine module lists to ensure commas are placed correctly
     all_modules = {**builtin_modules, **user_modules}
-    module_list = [module for module in all_modules.keys() if all_modules[module]["flag"] == "TRUE"]
+    module_list = [
+        module
+        for module, data in all_modules.items()
+        if isinstance(data, dict) and data.get("flag") == "TRUE"
+    ]
 
     # Generate module bus enumeration with an extra comma before num_entries
     for module in module_list:
@@ -319,7 +353,6 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
 
         print(f"Saved SystemVerilog Module file: {output_file}")
 
-
 def get_c_code_folders(parsed_configs):
     """Extracts C_CODE_FOLDER values from the parsed configs if present."""
     c_folders = {}
@@ -331,7 +364,286 @@ def get_c_code_folders(parsed_configs):
                 c_folders[cpu_name] = folder_info["value"]
     return c_folders
 
-# Example usage:
+def resolve_expression(expr, parameter_table=None):
+    expr = str(expr).strip()
+
+    # Replace parameters
+    if parameter_table:
+        for param, val in parameter_table.items():
+            expr = expr.replace(param, str(val))
+
+    # Replace SystemVerilog-style literals
+    def sv_number_to_python(match):
+        raw = match.group(0)
+        # Strip bit-width if present
+        if "'" in raw:
+            _, radix_value = raw.split("'")
+            radix = radix_value[0].lower()
+            value = radix_value[1:]
+
+            # Convert based on radix
+            if radix == 'h':
+                return str(int(value, 16))
+            elif radix == 'd':
+                return str(int(value, 10))
+            elif radix == 'b':
+                return str(int(value, 2))
+            elif radix == 'o':
+                return str(int(value, 8))
+        return raw  # fallback if malformed
+
+    # Replace all SV-style constants
+    expr = re.sub(r"\d*'[hdbonHDBON][0-9a-fA-F_]+", sv_number_to_python, expr)
+
+    # Clean underscore digits (e.g., 16'hDE_AD_BE_EF)
+    expr = expr.replace("_", "")
+
+    try:
+        return eval(expr, {"__builtins__": None}, {})
+    except Exception:
+        print(f"[WARN] Could not evaluate expression: {expr}")
+        return None
+
+def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
+    """
+    Assigns memory addresses to modules marked with 'auto': True using aligned placement,
+    while avoiding overlap with existing bounds—evaluating symbolic expressions correctly.
+    """
+    
+    def find_free_address(used_ranges, needed_size):
+        addr = 0x0000
+        while True:
+            addr = (addr + alignment - 1) & ~(alignment - 1)
+            end_addr = addr + needed_size - 1
+            overlap = any(not (end_addr < s or addr > e) for s, e in used_ranges)
+            if not overlap:
+                return addr
+            addr += alignment
+
+    for cpu_name, cpu_config in parsed_configs.items():
+        # Build parameter table for expression resolution
+        parameter_table = {}
+        for param_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            for param_name, param_data in cpu_config.get(param_section, {}).items():
+                val = param_data.get("value")
+                try:
+                    parameter_table[param_name] = (
+                        int(val.replace("'h", ""), 16)
+                        if isinstance(val, str) and val.startswith("'h")
+                        else int(val)
+                    )
+                except Exception:
+                    continue
+
+        used_ranges = []
+
+        # Collect all bounds from both BUILTIN and USER modules
+        for section_name in ["BUILTIN_MODULES", "USER_MODULES"]:
+            for mod_name, mod in cpu_config.get(section_name, {}).items():
+                if mod_name == "BaseAddress" or not isinstance(mod, dict):
+                    continue
+                bounds = mod.get("bounds")
+                if bounds and isinstance(bounds, list) and len(bounds) == 2:
+                    try:
+                        start = resolve_expression(bounds[0], parameter_table)
+                        end = resolve_expression(bounds[1], parameter_table)
+                        used_ranges.append((start, end))
+                    except Exception:
+                        print(f"[WARN] Could not resolve bounds for {mod_name}: {bounds}")
+
+        # Assign addresses to auto modules
+        for section_name in ["BUILTIN_MODULES", "USER_MODULES"]:
+            section = cpu_config.get(section_name, {})
+            for mod_name, mod in section.items():
+                if mod_name == "BaseAddress" or not isinstance(mod, dict):
+                    continue
+                if mod.get("flag") == "TRUE" and mod.get("auto", False):
+                    #reg_count = mod.pop("registers", None)
+                    raw_reg_count = str(mod.pop("registers", None))
+                    reg_count = int(resolve_expression(raw_reg_count, parameter_table))
+                    print(reg_count)
+                    mod.pop("auto", None)
+
+                    if not isinstance(reg_count, int) or reg_count < 1:
+                        print(f"[WARN] Invalid register count in {mod_name}")
+                        continue
+
+                    needed_size = reg_count * reg_width_bytes
+                    start_addr = find_free_address(used_ranges, needed_size)
+                    end_addr = start_addr + (reg_count - 1) * reg_width_bytes
+
+                    mod["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
+                    used_ranges.append((start_addr, end_addr))
+
+def dump_all_registers_from_configs(parsed_configs, save_to_file=False, file_path="all_cpu_registers.txt", reg_width_bytes=4, user_modules_only=False):
+    """
+    Resolves symbolic expressions and dumps register addresses for all CPUs in parsed_configs.
+    Skips inactive modules. Supports address expressions and optionally limits output to USER_MODULES.
+    ASCII-only output.
+    """
+
+    lines = []
+    lines.append("Register Address Map")
+    lines.append("=" * 20)
+
+    for cpu_name, cpu_config in parsed_configs.items():
+        lines.append(f"\nCPU: {cpu_name}")
+
+        # Build parameter lookup
+        parameter_table = {}
+        for section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            for param_name, param_data in cpu_config.get(section, {}).items():
+                val = param_data.get("value")
+                try:
+                    if isinstance(val, str) and val.startswith("'h"):
+                        parameter_table[param_name] = int(val.replace("'h", ""), 16)
+                    else:
+                        parameter_table[param_name] = int(val)
+                except ValueError:
+                    continue
+
+        section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
+
+        for section in section_list:
+            lines.append(f"  Section: {section}")
+            for module_name, module in cpu_config.get(section, {}).items():
+
+                if module_name == "BaseAddress":
+                    continue  # Skip base directive
+
+                if not isinstance(module, dict):
+                    continue  # Skip anything malformed
+
+                if module.get("flag") != "TRUE":
+                    continue
+                if "bounds" not in module:
+                    lines.append(f"    Warning: {module_name} missing bounds")
+                    continue
+
+                try:
+                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
+                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                except Exception as e:
+                    lines.append(f"    Error in {module_name}: {e}")
+                    continue
+
+                reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
+                lines.append(
+                    f"    Module: {module_name} | {reg_count} registers | Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}"
+                )
+                for i in range(reg_count):
+                    reg_addr = start_addr + i * reg_width_bytes
+                    lines.append(f"      Register {i} at address: 'h{reg_addr:04X}")
+
+    output = "\n".join(lines)
+    print(output)
+    print("")
+
+    if save_to_file:
+        with open(file_path, "w") as f:
+            f.write(output)
+        print(f"\nRegister map saved to: {file_path}")
+
+class CompactRegisterBlock:
+    def __init__(self, base, count, address_wording):
+        self.base = base
+        self.count = count
+        self.address_wording = address_wording
+
+    def reg_at(self, index):
+        return self.base + index * self.address_wording
+
+def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=False):
+    """
+    Generates both C-style headers and Python register map files per CPU.
+    Each output includes CompactRegisterBlock definitions and register constants.
+    """
+
+    def resolve_expression(expr, parameter_table):
+        expr = expr.strip().replace("'h", "0x")
+        for param, val in parameter_table.items():
+            expr = expr.replace(param, str(val))
+        return eval(expr, {"__builtins__": None}, {})
+
+    for cpu_name, cpu_config in parsed_configs.items():
+        output_dir = cpu_name
+        os.makedirs(output_dir, exist_ok=True)
+
+        c_filename = os.path.join(output_dir, f"{cpu_name}_registers.h")
+        py_filename = os.path.join(output_dir, f"{cpu_name}_registers.py")
+
+        c_lines = []
+        py_lines = []
+
+        # C header boilerplate
+        c_lines.append("// Auto-generated register map header")
+        c_lines.append("#pragma once\n")
+        c_lines.append("#include <stdint.h>\n")
+        c_lines.append("typedef struct {")
+        c_lines.append("    uintptr_t base;")
+        c_lines.append("    size_t count;")
+        c_lines.append("    size_t address_wording;")
+        c_lines.append("} CompactRegisterBlock;\n")
+        c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
+
+        # Python boilerplate
+        py_lines.append("# Auto-generated register map header\n")
+        py_lines.append("class CompactRegisterBlock:")
+        py_lines.append("    def __init__(self, base, count, address_wording):")
+        py_lines.append("        self.base = base")
+        py_lines.append("        self.count = count")
+        py_lines.append("        self.address_wording = address_wording\n")
+        py_lines.append("    def reg_at(self, index):")
+        py_lines.append("        return self.base + index * self.address_wording\n")
+
+        # Extract parameters
+        parameter_table = {}
+        for section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            for param_name, param_data in cpu_config.get(section, {}).items():
+                val = param_data.get("value")
+                try:
+                    parameter_table[param_name] = int(val.replace("'h", ""), 16) if isinstance(val, str) and val.startswith("'h") else int(val)
+                except ValueError:
+                    continue
+
+        module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
+
+        for section in module_sections:
+            for module_name, module in cpu_config.get(section, {}).items():
+                if module_name == "BaseAddress" or not isinstance(module, dict):
+                    continue
+                if module.get("flag") != "TRUE" or "bounds" not in module:
+                    continue
+
+                try:
+                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
+                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                except Exception:
+                    continue
+
+                reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
+                module_id = module_name.upper()
+
+                # C macros
+                for i in range(reg_count):
+                    addr = start_addr + i * reg_width_bytes
+                    c_lines.append(f"#define {module_id}_REG{i} 0x{addr:04X}")
+                c_lines.append(f"CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
+
+                # Python constants
+                for i in range(reg_count):
+                    addr = start_addr + i * reg_width_bytes
+                    py_lines.append(f"{module_id}_REG{i} = 0x{addr:04X}")
+                py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+
+        with open(c_filename, "w") as f:
+            f.write("\n".join(c_lines))
+        print(f"C header saved: {c_filename}")
+
+        with open(py_filename, "w") as f:
+            f.write("\n".join(py_lines))
+        print(f"Python header saved: {py_filename}\n")
+
 directory_path = "."
 build_script = "build_single_module.sh"
 
@@ -346,6 +658,17 @@ filtered_dirs = [dir_name for dir_name in config_files if config_files.get(dir_n
 
 parsed_configs = process_configs(directory_path)
 #print(parsed_configs)
+assign_auto_addresses(parsed_configs)
+#print(parsed_configs)
+
+if "--print-all-registers" in sys.argv:
+    dump_all_registers_from_configs(parsed_configs,user_modules_only=False)
+
+if "--print-user-registers" in sys.argv:
+    dump_all_registers_from_configs(parsed_configs,user_modules_only=True)
+
+if "--gen-headers" in sys.argv:
+    export_per_cpu_headers(parsed_configs,user_modules_only=False)
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)
@@ -364,6 +687,11 @@ if "--build" in sys.argv:
         parent_directory = os.path.dirname(current_directory)
         print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
         try:
+            if "--gen-header" in sys.argv:
+                if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
+                    os.remove(f"{build_folder}/{cpu_name}_registers.h")
+                print(f"Moved header {cpu_name}/{cpu_name}_registers.h to {build_folder}\n")
+                shutil.move(f"{cpu_name}/{cpu_name}_registers.h", build_folder)
             result = subprocess.run(["bash", build_script, "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
             print(result.stdout + result.stderr)
         except FileNotFoundError:

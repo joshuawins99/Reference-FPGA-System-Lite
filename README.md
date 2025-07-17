@@ -39,6 +39,15 @@ Now create a config file named cpu_config.txt and place it in the cpu_test folde
 #Parameters follow Name : Value : Width (Optional)
 #BUILTIN_MODULES are included modules
 #Modules follow enumeration name : Enable TRUE/FALSE : Address Bounds
+#Optionally a base address can be appended to USER_MODULES
+#Module definitions under USER_MODULES can have the AUTO type followed by the number of registers
+#USER_MODULES: 'h9200
+#   my_module_e : TRUE : AUTO : 3
+#This will automatically assign register addresses and will be printed to console
+#A C Header and Python Header are also generated
+#If a parameter is to be used for number of registers:
+#   my_module_e : TRUE : AUTO : {Parameter}
+#Manually placed register locations can also be placed at the same time
 #Place extra modules not included by default in USER_MODULES
 
 CONFIG_PARAMETERS:
@@ -70,6 +79,11 @@ Run the python script to generate the module and package file:
 python3 generate_cpu_instance.py
 ```
 Optionally, under the CONFIG_PARAMETERS section is the C_Code_Folder variable. This variable is used when running the generate_cpu_instance.py script with the ``--build`` flag. This allows the python script to both build and place the output files in the correct directory. Multiple unique instances of this system can be used in a single project easily this way. This option will call the build_single_module.sh for each instance of config file automatically so the script itself doesn't have to be run if using it this way.
+
+There are three more flags as part of generate_cpu_instance.py:
+    ``--print-all-registers`` -> prints all the registers and their addresses to console
+    ``--print-user-registers`` -> prints only the user registers to console
+    ``--gen-headers`` -> generates C and Python headers for use in a program 
 
 An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32:
 ```Verilog
