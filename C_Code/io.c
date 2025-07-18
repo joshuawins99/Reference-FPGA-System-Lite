@@ -37,55 +37,88 @@ char* ReadVersion() {
     return readversion;
 }
 
-char* readFPGA(char *addr) {
+char* readFPGA(uint32_t addr) {
     static char rd_data[11];
-
-    sprintf(rd_data, "%u", ReadIO32(atoi(addr)));
+    sprintf(rd_data, "%u", ReadIO32(addr));
     return rd_data;
 }
 
-void writeFPGA(char *addr, char *data) {
-    WriteIO32(atoi(addr), strtoul(data, NULL, 10));
+void writeFPGA(uint32_t addr, uint32_t data) {
+    WriteIO32(addr, data);
 }
 
-typedef char* (*command_func)(char*);
+uint32_t checkAddress(uint32_t addr_val) {
+    // Check if address is aligned to ADDR_WORD boundary
+    if (addr_val % ADDR_WORD != 0) return 0;
 
-typedef struct {
-    const char *command;
-    command_func func;
-    unsigned char length;
-} command_entry;
+    return addr_val;
+}
+
+ParsedCommand ParseCommand(char *input) {
+    ParsedCommand result = {0};
+    int i = 0;
+    int j = 0;
+    int field = 0;
+    uint32_t val;
+    char current_char;
+
+    // Parse command
+    while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
+        if (j < sizeof(result.command) - 1) {
+            result.command[j++] = current_char;
+        }
+        i++;
+    }
+    result.command[j] = '\0';
+    if (input[i] == ',') i++;
+
+    // Parse all values up to MAX_CMD_ARGS
+    while (field < MAX_CMD_ARGS && input[i] != '\0' && input[i] != '\n') {
+        j = 0;
+        val = 0;
+
+        while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
+            if (current_char >= '0' && current_char <= '9') {
+                //val = val * 10 + (input[i] - '0');
+                val = (val << 3) + (val << 1) + (current_char - '0');
+            }
+            if (j < sizeof(result.rawValues[field]) - 1) {
+                result.rawValues[field][j++] = current_char;
+            }
+            i++;
+        }
+
+        result.rawValues[field][j] = '\0';
+        result.values[field] = val;
+        field++;
+
+        if (input[i] == ',') i++;
+    }
+
+    result.valueCount = field;
+    return result;
+}
+
+char* readFPGAWrapper(char *data) {
+    ParsedCommand cmd_data;
+    uint32_t addr_val;
+    cmd_data = ParseCommand(data);
+    addr_val = checkAddress(cmd_data.values[0]);
+    return readFPGA(addr_val);
+}
+
+char* writeFPGAWrapper(char *data) {
+    ParsedCommand cmd_data;
+    uint32_t addr_val;
+    cmd_data = ParseCommand(data);
+    addr_val = checkAddress(cmd_data.values[0]);
+    writeFPGA(addr_val, cmd_data.values[1]);
+    return NULL;
+}
 
 const char READF[]    = "rFPGA,";
 const char WRITEF[]   = "wFPGA,";
 const char RVERSION[] = "readFPGAVersion";
-
-char* readFPGAWrapper(char *data) {
-    static char addr_sub[6];
-    strncpy(addr_sub, data + 6, strlen(data) - 6);
-    return readFPGA(&addr_sub[0]);
-}
-
-char* writeFPGAWrapper(char *data) {
-    static char addr_sub[6];
-    static char data_sub[11];
-    unsigned char j = 0;
-    unsigned char k = 0;
-    unsigned char address_done = 0;
-
-    for (j = 6; j <= (strlen(data)); ++j) {
-        if (data[j] != ',' && address_done == 0) {
-            addr_sub[j - 6] = data[j];
-        } else if (data[j] != '\n' && data[j] != '\r' && data[j] != ',') {
-            data_sub[k] = data[j];
-            ++k;
-        } else {
-            address_done = 1;
-        }
-    }
-    writeFPGA(&addr_sub[0], &data_sub[0]);
-    return NULL;
-}
 
 const command_entry commands[] = {
     {READF,    readFPGAWrapper,    sizeof(READF)-1   },
