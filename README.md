@@ -74,6 +74,23 @@ BUILTIN_MODULES:
 USER_MODULES:
 ```
 
+Additionally, Names and Descriptions can be added for modules and registers.
+```
+USER_MODULES:
+    timer_e     : TRUE : AUTO : 3,
+        Name : Timer
+        Description : Will wait until set value expires and then change the output
+        Reg0 :
+            Name :  Set Timer Value
+            Description : Sets the timer value
+        Reg1 :
+            Name :  Start Timer
+            Description : Starts the timer
+        Reg2 :
+            Name : Read Timer Status
+            Description : Reads if timer is still busy or finished
+```
+
 Run the python script to generate the module and package file:
 ```bash
 python3 generate_cpu_instance.py

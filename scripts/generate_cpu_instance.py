@@ -18,35 +18,52 @@ def check_config_files(directory):
     return {folder: os.path.exists(os.path.join(directory, folder, "cpu_config.txt")) for folder in folders}  # Corrected iteration
 
 def parse_config(file_path):
-    """Parses the cpu_config.txt file and returns a structured dictionary."""
+    """Parses the cpu_config.txt file and returns a structured dictionary, including metadata and multiline support."""
     config_data = {}
     current_section = None
+    current_module = None
+    current_register = None
+    pending_key = None
+    pending_value = ""
 
     with open(file_path, "r") as file:
-        for line in file:
-            line = line.strip()
-            if not line or line.startswith("#"):  # Skip empty lines or comments
+        for raw_line in file:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
                 continue
 
-            # Match section headers
-            #section_match = re.match(r"(\w+):", line)
+            # Handle multiline continuation
+            if pending_key:
+                if line.endswith("\\"):
+                    pending_value += " " + line.rstrip("\\").strip()
+                    continue
+                else:
+                    pending_value += " " + line.strip()
+                    # Finalize the pending value
+                    if current_register:
+                        config_data[current_section][current_module]["regs"][current_register][pending_key] = pending_value.strip()
+                    else:
+                        config_data[current_section][current_module]["metadata"][pending_key] = pending_value.strip()
+                    pending_key = None
+                    pending_value = ""
+                    continue
+
+            # Pattern matching
             section_match = re.match(r"^(\w+):\s*(.*)?$", line)
-
-            # Match parameters with optional bit-width
             param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
-
-            # Match module entries with flags and bounds
             module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}", line)
-
-            # Match AUTO keyword (e.g. AUTO : 4)
-            auto_module_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}", line)
-            auto_module_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)", line)
+            auto_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}", line)
+            auto_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)", line)
+            reg_match = re.match(r"(Reg\d+)\s*:", line)
+            name_match = re.match(r"Name\s*:\s*(.+)", line)
+            desc_match = re.match(r"Description\s*:\s*(.+)", line)
 
             if section_match:
                 current_section = section_match.group(1)
                 config_data.setdefault(current_section, {})
+                current_module = None
+                current_register = None
                 remainder = section_match.group(2).strip() if section_match.group(2) else ""
-                # If there's something after the colon, it's a BaseAddress
                 if remainder:
                     config_data[current_section]["BaseAddress"] = remainder
 
@@ -54,36 +71,37 @@ def parse_config(file_path):
                 key = param_match.group(1)
                 value = param_match.group(2).rstrip(",")
                 bit_width = param_match.group(3)
-
+                config_data[current_section][key] = {"value": value}
                 if bit_width:
-                    config_data[current_section][key] = {
-                        "value": value,
-                        "bit_width": bit_width
-                    }
-                else:
-                    config_data[current_section][key] = {
-                        "value": value
-                    }
-            
-            elif auto_module_expr_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-                key = auto_module_expr_match.group(1)
-                flag = auto_module_expr_match.group(2)
-                reg_count = auto_module_expr_match.group(3)
-                config_data[current_section][key] = {
-                    "flag": flag,
-                    "auto": True,
-                    "registers": reg_count
-                }
+                    config_data[current_section][key]["bit_width"] = bit_width
 
-            elif auto_module_literal_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-                key = auto_module_literal_match.group(1)
-                flag = auto_module_literal_match.group(2)
-                reg_count = int(auto_module_literal_match.group(3))
+            elif auto_expr_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                key = auto_expr_match.group(1)
+                flag = auto_expr_match.group(2)
+                reg_count = auto_expr_match.group(3)
                 config_data[current_section][key] = {
                     "flag": flag,
                     "auto": True,
-                    "registers": reg_count
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {}
                 }
+                current_module = key
+                current_register = None
+
+            elif auto_literal_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                key = auto_literal_match.group(1)
+                flag = auto_literal_match.group(2)
+                reg_count = int(auto_literal_match.group(3))
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {}
+                }
+                current_module = key
+                current_register = None
 
             elif module_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
                 key = module_match.group(1)
@@ -91,8 +109,34 @@ def parse_config(file_path):
                 bounds = [b.strip().rstrip(",") for b in module_match.group(3).split(",")]
                 config_data[current_section][key] = {
                     "flag": flag,
-                    "bounds": bounds
+                    "bounds": bounds,
+                    "metadata": {},
+                    "regs": {}
                 }
+                current_module = key
+                current_register = None
+
+            elif current_module and reg_match:
+                current_register = reg_match.group(1)
+                config_data[current_section][current_module]["regs"].setdefault(current_register, {})
+
+            elif current_module and name_match:
+                name_val = name_match.group(1)
+                if current_register:
+                    config_data[current_section][current_module]["regs"][current_register]["name"] = name_val
+                else:
+                    config_data[current_section][current_module]["metadata"]["name"] = name_val
+
+            elif current_module and desc_match:
+                desc_val = desc_match.group(1)
+                if desc_val.endswith("\\"):
+                    pending_key = "description"
+                    pending_value = desc_val.rstrip("\\").strip()
+                else:
+                    if current_register:
+                        config_data[current_section][current_module]["regs"][current_register]["description"] = desc_val.strip()
+                    else:
+                        config_data[current_section][current_module]["metadata"]["description"] = desc_val.strip()
 
     return config_data
 
@@ -513,19 +557,18 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
             # Step 6: Clean up BaseAddress
             section.pop("BaseAddress", None)
 
-def dump_all_registers_from_configs(parsed_configs, save_to_file=False, file_path="all_cpu_registers.txt", reg_width_bytes=4, user_modules_only=False):
+def dump_all_registers_from_configs(parsed_configs, print_to_console=True, save_to_file=False, file_path="all_cpu_registers.txt", reg_width_bytes=4, user_modules_only=False):
     """
-    Resolves symbolic expressions and dumps register addresses for all CPUs in parsed_configs.
-    Skips inactive modules. Supports address expressions and optionally limits output to USER_MODULES.
-    ASCII-only output.
+    Resolves symbolic expressions and dumps register addresses with metadata for all CPUs.
+    ASCII-only output with clean indentation and structured formatting.
     """
-
     lines = []
     lines.append("Register Address Map")
-    lines.append("=" * 20)
+    lines.append("====================")
 
     for cpu_name, cpu_config in parsed_configs.items():
-        lines.append(f"\nCPU: {cpu_name}")
+        lines.append("")
+        lines.append(f"Instance: {cpu_name}")
 
         # Build parameter lookup
         parameter_table = {}
@@ -543,15 +586,12 @@ def dump_all_registers_from_configs(parsed_configs, save_to_file=False, file_pat
         section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
         for section in section_list:
+            lines.append("")
             lines.append(f"  Section: {section}")
+
             for module_name, module in cpu_config.get(section, {}).items():
-
-                if module_name == "BaseAddress":
-                    continue  # Skip base directive
-
-                if not isinstance(module, dict):
-                    continue  # Skip anything malformed
-
+                if module_name == "BaseAddress" or not isinstance(module, dict):
+                    continue
                 if module.get("flag") != "TRUE":
                     continue
                 if "bounds" not in module:
@@ -566,16 +606,36 @@ def dump_all_registers_from_configs(parsed_configs, save_to_file=False, file_pat
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-                lines.append(
-                    f"    Module: {module_name} | {reg_count} registers | Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}"
-                )
+
+                # Module metadata
+                mod_meta = module.get("metadata", {})
+                mod_name_str = mod_meta.get("name", module_name)
+                mod_desc_str = mod_meta.get("description", "")
+
+                lines.append("")
+                lines.append(f"    -> Module: {mod_name_str} ({module_name})")
+                lines.append(f"       - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
+                lines.append(f"       - Register Count: {reg_count}")
+                if mod_desc_str:
+                    lines.append(f"       - Description: {mod_desc_str}")
+
+                # Register metadata
                 for i in range(reg_count):
                     reg_addr = start_addr + i * reg_width_bytes
-                    lines.append(f"      Register {i} at address: 'h{reg_addr:04X}")
+                    reg_key = f"Reg{i}"
+                    reg_info = module.get("regs", {}).get(reg_key, {})
+                    reg_name_str = reg_info.get("name", f"Reg{i}")
+                    reg_desc_str = reg_info.get("description", "")
+
+                    lines.append("")
+                    lines.append(f"        -> {reg_key}: {reg_name_str}")
+                    lines.append(f"           - Address: 'h{reg_addr:04X}")
+                    if reg_desc_str:
+                        lines.append(f"           - Description: {reg_desc_str}")
 
     output = "\n".join(lines)
-    print(output)
-    print("")
+    if (print_to_console == True):
+        print(output)
 
     if save_to_file:
         with open(file_path, "w") as f:
@@ -590,18 +650,11 @@ class CompactRegisterBlock:
 
     def reg_at(self, index):
         return self.base + index * self.address_wording
-
+    
 def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=False):
-    """
-    Generates both C-style headers and Python register map files per CPU.
-    Each output includes CompactRegisterBlock definitions and register constants.
-    """
 
-    def resolve_expression(expr, parameter_table):
-        expr = expr.strip().replace("'h", "0x")
-        for param, val in parameter_table.items():
-            expr = expr.replace(param, str(val))
-        return eval(expr, {"__builtins__": None}, {})
+    def sanitize_identifier(text):
+        return re.sub(r'\W+', '_', text.strip()).upper()
 
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
@@ -613,7 +666,7 @@ def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=
         c_lines = []
         py_lines = []
 
-        # C header boilerplate
+        # C Header Boilerplate
         c_lines.append("// Auto-generated register map header")
         c_lines.append("#pragma once\n")
         c_lines.append("#include <stdint.h>\n")
@@ -624,17 +677,20 @@ def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=
         c_lines.append("} CompactRegisterBlock;\n")
         c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
 
-        # Python boilerplate
-        py_lines.append("# Auto-generated register map header\n")
+        # Python Header Boilerplate
+        py_lines.append("# Auto-generated register map header")
+        py_lines.append("from enum import Enum\n")
         py_lines.append("class CompactRegisterBlock:")
         py_lines.append("    def __init__(self, base, count, address_wording):")
         py_lines.append("        self.base = base")
         py_lines.append("        self.count = count")
         py_lines.append("        self.address_wording = address_wording\n")
         py_lines.append("    def reg_at(self, index):")
+        py_lines.append("        if index >= self.count:")
+        py_lines.append("            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')")
         py_lines.append("        return self.base + index * self.address_wording\n")
 
-        # Extract parameters
+        # Parameter Table
         parameter_table = {}
         for section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
             for param_name, param_data in cpu_config.get(section, {}).items():
@@ -644,6 +700,7 @@ def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=
                 except ValueError:
                     continue
 
+        # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
         for section in module_sections:
@@ -661,17 +718,60 @@ def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
                 module_id = module_name.upper()
+                mod_meta = module.get("metadata", {})
+                mod_name_str = mod_meta.get("name", module_name)
+                mod_desc_str = mod_meta.get("description", "").strip()
 
-                # C macros
+                # === Module Documentation ===
+                c_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                if mod_desc_str:
+                    c_lines.append(f"// Module Description: {mod_desc_str}")
+                py_lines.append(f"# Module: {mod_name_str} ({module_name})")
+                if mod_desc_str:
+                    py_lines.append(f"# Module Description: {mod_desc_str}")
+
+                enum_name = f"{module_id}_REG"
+
+                # C Enum Collection
+                c_enum_entries = []
+                c_addr_macros = []
+
+                # Python Enum Block
+                #py_lines.append(f"class {enum_name}(Enum):")
+                py_enum_entries = []
+                py_addr_lines = []
+
                 for i in range(reg_count):
                     addr = start_addr + i * reg_width_bytes
-                    c_lines.append(f"#define {module_id}_REG{i} 0x{addr:04X}")
-                c_lines.append(f"CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
+                    reg_key = f"Reg{i}"
+                    reg_info = module.get("regs", {}).get(reg_key, {})
+                    reg_name_raw = reg_info.get("name", f"Reg{i}")
+                    reg_desc = reg_info.get("description", "").strip()
+                    reg_name_id = sanitize_identifier(reg_name_raw)
+                    entry_name = f"{module_id}_{reg_name_id}"
 
-                # Python constants
-                for i in range(reg_count):
-                    addr = start_addr + i * reg_width_bytes
-                    py_lines.append(f"{module_id}_REG{i} = 0x{addr:04X}")
+                    # C enum entry
+                    comma = "," if i < reg_count - 1 else ""
+                    c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
+                    c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
+                    if reg_desc:
+                        c_addr_macros.append(f"// Register Description: {reg_desc}")
+
+                    # Python enum entry
+                    py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
+                    py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
+                    if reg_desc:
+                        #py_enum_entries.append(f"    #    {reg_desc}")
+                        py_addr_lines.append(f"# Register Description: {reg_desc}")
+                    
+                #c_lines.append(f"typedef enum {{")
+                #c_lines.extend(c_enum_entries)
+                #c_lines.append(f"}} {enum_name};\n")
+                c_lines.extend(c_addr_macros)
+                c_lines.append(f"const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
+
+                #py_lines.extend(py_enum_entries)
+                py_lines.extend(py_addr_lines)
                 py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
 
         with open(c_filename, "w") as f:
