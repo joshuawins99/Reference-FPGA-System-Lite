@@ -20,3 +20,4 @@ sim/vlog.opt
 sim/vsim.wlf
 sim/transcript
 sim_result.txt
+scripts/__pycache__

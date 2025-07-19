@@ -74,7 +74,7 @@ BUILTIN_MODULES:
 USER_MODULES:
 ```
 
-Additionally, Names and Descriptions can be added for modules and registers.
+Additionally, Names, Descriptions, and Permissions can be added for modules and registers.
 ```
 USER_MODULES:
     timer_e     : TRUE : AUTO : 3,
@@ -83,12 +83,15 @@ USER_MODULES:
         Reg0 :
             Name :  Set Timer Value
             Description : Sets the timer value
+            Permissions : Write
         Reg1 :
             Name :  Start Timer
             Description : Starts the timer
+            Permissions : Write
         Reg2 :
             Name : Read Timer Status
             Description : Reads if timer is still busy or finished
+            Permissions : Read
 ```
 
 Run the python script to generate the module and package file:
@@ -98,9 +101,12 @@ python3 generate_cpu_instance.py
 Optionally, under the CONFIG_PARAMETERS section is the C_Code_Folder variable. This variable is used when running the generate_cpu_instance.py script with the ``--build`` flag. This allows the python script to both build and place the output files in the correct directory. Multiple unique instances of this system can be used in a single project easily this way. This option will call the build_single_module.sh for each instance of config file automatically so the script itself doesn't have to be run if using it this way.
 
 There are three more flags as part of generate_cpu_instance.py:
-    ``--print-all-registers`` -> prints all the registers and their addresses to console
-    ``--print-user-registers`` -> prints only the user registers to console
-    ``--gen-headers`` -> generates C and Python headers for use in a program 
+
+    --print-all-registers -> prints all the registers and their addresses to console
+    --print-user-registers -> prints only the user registers to console
+    --save-all-registers -> save all registers info to a file
+    --save-user-registers -> save user registers info to a file 
+    --gen-headers -> generates C and Python headers for use in a program 
 
 An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32:
 ```Verilog
