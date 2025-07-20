@@ -10,17 +10,17 @@ class CompactRegisterBlock:
     def reg_at(self, index):
         return self.base + index * self.address_wording
     
-def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=False):
+def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, user_modules_only=False):
 
     def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
 
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
-        os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
 
-        c_filename = os.path.join(output_dir, f"{cpu_name}_registers.h")
-        py_filename = os.path.join(output_dir, f"{cpu_name}_registers.py")
+        c_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.h")
+        py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
 
         c_lines = []
         py_lines = []
@@ -140,8 +140,8 @@ def export_per_cpu_headers(parsed_configs, reg_width_bytes=4, user_modules_only=
 
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
-        print(f"C header saved: {c_filename}")
+        print(f"C header saved to: {c_filename}")
 
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
-        print(f"Python header saved: {py_filename}\n")
+        print(f"Python header saved to: {py_filename}\n")

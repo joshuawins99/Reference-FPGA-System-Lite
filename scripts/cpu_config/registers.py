@@ -149,7 +149,7 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
             # Step 6: Clean up BaseAddress
             section.pop("BaseAddress", None)
 
-def dump_all_registers_from_configs(parsed_configs, print_to_console=True, save_to_file=False, file_path="all_cpu_registers.txt", reg_width_bytes=4, user_modules_only=False):
+def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_registers.txt", print_to_console=True, save_to_file=False, reg_width_bytes=4, user_modules_only=False):
     """
     Resolves symbolic expressions and dumps register addresses with metadata for all CPUs.
     ASCII-only output with clean indentation and structured formatting.
@@ -233,6 +233,7 @@ def dump_all_registers_from_configs(parsed_configs, print_to_console=True, save_
         print(output)
 
     if save_to_file:
-        with open(file_path, "w") as f:
+        combined_file_path = file_path+"/"+file_name
+        with open(combined_file_path, "w") as f:
             f.write(output)
         print(f"\nRegister map saved to: {file_path}")

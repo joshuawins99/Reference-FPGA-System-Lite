@@ -56,15 +56,17 @@ uint32_t checkAddress(uint32_t addr_val) {
 
 ParsedCommand ParseCommand(char *input) {
     ParsedCommand result = {0};
-    int i = 0;
-    int j = 0;
-    int field = 0;
+    unsigned char i = 0;
+    unsigned char j = 0;
+    unsigned char field = 0;
     uint32_t val;
     char current_char;
+    unsigned char command_size = sizeof(result.command) - 1;
+    unsigned char rawValues_size = sizeof(result.rawValues[0]) - 1;
 
     // Parse command
     while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
-        if (j < sizeof(result.command) - 1) {
+        if (j < command_size) {
             result.command[j++] = current_char;
         }
         i++;
@@ -82,7 +84,7 @@ ParsedCommand ParseCommand(char *input) {
                 //val = val * 10 + (input[i] - '0');
                 val = (val << 3) + (val << 1) + (current_char - '0');
             }
-            if (j < sizeof(result.rawValues[field]) - 1) {
+            if (j < rawValues_size) {
                 result.rawValues[field][j++] = current_char;
             }
             i++;

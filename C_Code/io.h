@@ -20,10 +20,10 @@ typedef struct {
 } command_entry;
 
 typedef struct {
-    char command[16];               // Command name
+    char command[16];                 // Command name
     char rawValues[MAX_CMD_ARGS][16]; // Raw strings for each value
-    uint32_t values[MAX_CMD_ARGS];   // Parsed integers
-    int valueCount;                // Actual number of values found
+    uint32_t values[MAX_CMD_ARGS];    // Parsed integers
+    unsigned char valueCount;         // Actual number of values found
 } ParsedCommand;
 
 void Print (unsigned char, char *);

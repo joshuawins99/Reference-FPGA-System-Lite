@@ -13,11 +13,23 @@ config_file_names = ["cpu_config.txt", "cpu_config.cfg"]
 directory_path = "."
 build_script = "build_single_module.sh"
 
+if "--configs-path" in sys.argv:
+    index = sys.argv.index("--configs-path")
+    if index + 1 < len(sys.argv):
+        path = sys.argv[index + 1]
+        directory_path = path      
+    else:
+        assert False, "No path provided after --configs-path"
+
+absolute_path = os.path.abspath(directory_path)
+
 #folders = list_folders(directory_path)
 #print(folders)
 
 config_files = check_config_files(directory_path, config_file_names)
 #print(config_files)
+if not any(config_files.values()):
+    assert False, "Error: No Config Files Found"
 
 filtered_dirs = [dir_name for dir_name in config_files if config_files.get(dir_name)]
 #print(filtered_dirs)
@@ -29,33 +41,37 @@ assign_auto_addresses(parsed_configs)
 
 if "--print-all-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs,user_modules_only=False)
+        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=False)
 
 if "--save-all-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs,user_modules_only=False, save_to_file=True, file_path="cpu_registers.txt",print_to_console=False)
+        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=False, save_to_file=True,print_to_console=False)
 
 if "--print-user-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs,user_modules_only=True)
+        dump_all_registers_from_configs(parsed_configs,absolute_path, user_modules_only=True)
 
 if "--save-user-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs,user_modules_only=True, save_to_file=True, file_path="cpu_registers.txt", print_to_console=True)
+        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=True, save_to_file=True, print_to_console=True)
 
 if "--gen-headers" in sys.argv:
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs,user_modules_only=False)
+        export_per_cpu_headers(parsed_configs, absolute_path, user_modules_only=False)
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)
 
 default_c_code_path = "C_Code"  #Default Folder
 
+def go_up_n_levels(path, levels):
+    for _ in range(levels):
+        path = os.path.dirname(path)
+    return path
+
 if "--build" in sys.argv:
-    current_directory = os.path.dirname(os.path.abspath(__file__))
+    current_directory = os.path.abspath(__file__)
     if (filtered_dirs):
-        absolute_path = os.path.abspath(".")
         for cpu_name in filtered_dirs:
             config_folder = c_code_folders.get(cpu_name)
             build_folder = (
@@ -63,18 +79,19 @@ if "--build" in sys.argv:
                 if config_folder
                 else os.path.join(directory_path, default_c_code_path)
             )
-            parent_directory = os.path.dirname(current_directory)
+            build_folder = os.path.abspath(build_folder)
+            parent_directory = go_up_n_levels(current_directory,3)
             print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
             try:
                 if "--gen-headers" in sys.argv:
                     if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
                         os.remove(f"{build_folder}/{cpu_name}_registers.h")
-                    print(f"Moved header {cpu_name}/{cpu_name}_registers.h to {build_folder}\n")
-                    shutil.move(f"{cpu_name}/{cpu_name}_registers.h", build_folder)
+                    print(f"Moved generated header {build_folder}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
+                    shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
                 result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
                 print(result.stdout + result.stderr)
             except FileNotFoundError:
-                print(f"Build folder not found for {cpu_name}: {build_folder}")
+                assert False, f"Build folder not found for {cpu_name}: {build_folder}"
 
             curr_config_dict = {cpu_name: parsed_configs.get(cpu_name)}
             save_systemverilog_files(curr_config_dict, directory_path)

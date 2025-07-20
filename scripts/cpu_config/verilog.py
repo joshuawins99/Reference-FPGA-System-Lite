@@ -129,7 +129,7 @@ def save_systemverilog_files(parsed_configs, base_directory):
         with open(output_file, "w") as file:
             file.write(systemverilog_output)
 
-        print(f"Generated and saved SystemVerilog package for {package_name}: {output_file}")
+        print(f"Generated and saved SystemVerilog package for {package_name}: {os.path.abspath(output_file)}")
 
 def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_fpga_sys_lite.sv"):
     """Reads a reference SystemVerilog file, replaces import statements and updates bus logic based on enabled modules."""
@@ -242,4 +242,4 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
         with open(output_file, "w") as file:
             file.write(updated_content)
 
-        print(f"Saved SystemVerilog Module file: {output_file}")
+        print(f"Saved SystemVerilog Module file: {os.path.abspath(output_file)}")
