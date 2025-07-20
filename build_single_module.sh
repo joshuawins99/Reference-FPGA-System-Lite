@@ -86,7 +86,7 @@ if [ "$BUILD_MODE" = true ] && [ "$VERSION_TYPE" = REL ]; then
 
     if grep -q "Testbench Passed!" sim_result.txt; then
         echo "Testbench Passed!"
-        scripts/combine_gen_cpu_deps.py
+        scripts/cpu_config/combine_gen_cpu_deps.py
         tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv generate_cpu_instance.py
         rm generate_cpu_instance.py
     else
