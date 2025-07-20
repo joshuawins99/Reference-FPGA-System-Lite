@@ -77,7 +77,7 @@ if "--build" in sys.argv:
             build_folder = (
                 os.path.join(absolute_path, cpu_name, config_folder)
                 if config_folder
-                else os.path.join(directory_path, default_c_code_path)
+                else os.path.join(current_directory,go_up_n_levels(current_directory,3),default_c_code_path)
             )
             build_folder = os.path.abspath(build_folder)
             parent_directory = go_up_n_levels(current_directory,3)
