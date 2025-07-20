@@ -21,3 +21,4 @@ sim/vsim.wlf
 sim/transcript
 sim_result.txt
 scripts/__pycache__
+scripts/cpu_config/__pycache__
