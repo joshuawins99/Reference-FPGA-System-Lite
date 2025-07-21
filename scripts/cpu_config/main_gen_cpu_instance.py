@@ -90,8 +90,8 @@ if "--build" in sys.argv:
                             os.remove(f"{build_folder}/{cpu_name}_registers.h")
                         print(f"Moved generated header {build_folder}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
                         shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
-                    result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
-                    print(result.stdout + result.stderr)
+                result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
+                print(result.stdout + result.stderr)
             except FileNotFoundError:
                 assert False, f"Build folder not found for {cpu_name}: {build_folder}"
 
