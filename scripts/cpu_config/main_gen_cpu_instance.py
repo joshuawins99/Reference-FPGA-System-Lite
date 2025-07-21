@@ -71,25 +71,27 @@ def go_up_n_levels(path, levels):
 
 if "--build" in sys.argv:
     current_directory = os.path.abspath(__file__)
+    default_c_code_path = os.path.join(current_directory,go_up_n_levels(current_directory,3),default_c_code_path)
     if (filtered_dirs):
         for cpu_name in filtered_dirs:
             config_folder = c_code_folders.get(cpu_name)
             build_folder = (
                 os.path.join(absolute_path, cpu_name, config_folder)
                 if config_folder
-                else os.path.join(current_directory,go_up_n_levels(current_directory,3),default_c_code_path)
+                else default_c_code_path
             )
             build_folder = os.path.abspath(build_folder)
             parent_directory = go_up_n_levels(current_directory,3)
             print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
             try:
                 if "--gen-headers" in sys.argv:
-                    if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
-                        os.remove(f"{build_folder}/{cpu_name}_registers.h")
-                    print(f"Moved generated header {build_folder}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
-                    shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
-                result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
-                print(result.stdout + result.stderr)
+                    if (build_folder != default_c_code_path): 
+                        if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
+                            os.remove(f"{build_folder}/{cpu_name}_registers.h")
+                        print(f"Moved generated header {build_folder}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
+                        shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
+                    result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
+                    print(result.stdout + result.stderr)
             except FileNotFoundError:
                 assert False, f"Build folder not found for {cpu_name}: {build_folder}"
 
