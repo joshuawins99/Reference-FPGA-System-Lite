@@ -64,7 +64,8 @@ def parse_config(file_path):
 
             # Pattern matching
             section_match = re.match(r"^(\w+):\s*(.*)?$", line)
-            param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
+            #param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
+            param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|\{[^}]+\}|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
             module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}", line)
             auto_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}", line)
             auto_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)", line)
@@ -86,7 +87,11 @@ def parse_config(file_path):
                 key = param_match.group(1)
                 value = param_match.group(2).rstrip(",")
                 bit_width = param_match.group(3)
-                config_data[current_section][key] = {"value": value}
+                if value.startswith("{") and value.endswith("}"):
+                    config_data[current_section][key] = {"value": value[1:-1].strip()}
+                else:
+                    config_data[current_section][key] = {"value": value}
+                    
                 if bit_width:
                     config_data[current_section][key]["bit_width"] = bit_width
 

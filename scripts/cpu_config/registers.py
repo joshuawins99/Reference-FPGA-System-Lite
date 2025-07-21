@@ -33,6 +33,9 @@ def resolve_expression(expr, parameter_table=None):
             val = str(parameter_table[param])
             expr = re.sub(rf"\b{re.escape(param)}\b", val, expr)
 
+    if re.search(r"[a-zA-Z_]\w*", expr):
+        return None  # Still contains unresolved variables
+
     # Evaluate arithmetic expression
     try:
         result = eval(expr, {"__builtins__": None}, {})
@@ -40,6 +43,41 @@ def resolve_expression(expr, parameter_table=None):
     except Exception:
         print(f"[WARN] Could not evaluate expression: {expr}")
         return None
+
+def build_parameter_table(parsed_configs):
+    for cpu_name, cpu_config in parsed_configs.items():
+        parameter_table = {}
+
+        # Flatten all parameters
+        all_parameters = {}
+        for param_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            all_parameters.update(cpu_config.get(param_section, {}))
+
+        unresolved = {name: data.get("value") for name, data in all_parameters.items()}
+        max_attempts = len(unresolved)
+
+        for attempt in range(max_attempts):
+            progress_made = False
+            for name, val in list(unresolved.items()):
+                try:
+                    result = resolve_expression(val, parameter_table)
+                    if result is not None:
+                        resolved_value = int(result)
+                        parameter_table[name] = resolved_value
+                        unresolved.pop(name)
+                        #print(f"[PASS {attempt+1}] Resolved {name} = {resolved_value}")
+                        progress_made = True
+                except Exception as e:
+                    print(f"[ERROR] {name}: {e}")
+
+            if not progress_made:
+                #print(f"[INFO] No progress made on pass {attempt+1}")
+                break
+
+        for name, val in unresolved.items():
+            print(f"[WARN] Unresolved: {name} = {val}")
+            
+    return parameter_table
 
 def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
     """
@@ -58,18 +96,7 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
 
     for cpu_name, cpu_config in parsed_configs.items():
         # Step 1: Build parameter table
-        parameter_table = {}
-        for param_section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
-            for name, data in cpu_config.get(param_section, {}).items():
-                val = data.get("value")
-                try:
-                    parameter_table[name] = (
-                        int(val.replace("'h", ""), 16)
-                        if isinstance(val, str) and val.startswith("'h")
-                        else int(val)
-                    )
-                except Exception:
-                    continue
+        parameter_table = build_parameter_table(parsed_configs)
 
         global_mask = []  # Tracks all used address ranges globally
 
@@ -163,17 +190,7 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
         lines.append(f"Instance: {cpu_name}")
 
         # Build parameter lookup
-        parameter_table = {}
-        for section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
-            for param_name, param_data in cpu_config.get(section, {}).items():
-                val = param_data.get("value")
-                try:
-                    if isinstance(val, str) and val.startswith("'h"):
-                        parameter_table[param_name] = int(val.replace("'h", ""), 16)
-                    else:
-                        parameter_table[param_name] = int(val)
-                except ValueError:
-                    continue
+        parameter_table = build_parameter_table(parsed_configs)
 
         section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 

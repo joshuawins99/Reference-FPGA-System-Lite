@@ -1,6 +1,6 @@
 import os
 import re
-from registers import resolve_expression
+from registers import resolve_expression, build_parameter_table
 class CompactRegisterBlock:
     def __init__(self, base, count, address_wording):
         self.base = base
@@ -50,14 +50,7 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
         py_lines.append("        return self.base + index * self.address_wording\n")
 
         # Parameter Table
-        parameter_table = {}
-        for section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
-            for param_name, param_data in cpu_config.get(section, {}).items():
-                val = param_data.get("value")
-                try:
-                    parameter_table[param_name] = int(val.replace("'h", ""), 16) if isinstance(val, str) and val.startswith("'h") else int(val)
-                except ValueError:
-                    continue
+        parameter_table = build_parameter_table(parsed_configs)
 
         # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
