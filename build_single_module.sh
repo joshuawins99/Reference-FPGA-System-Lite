@@ -1,6 +1,6 @@
 #!/bin/bash
 
-MODELSIM_ROOT_DIR=/root/QuestaSim/questasim/bin
+MODELSIM_ROOT_DIR=/root/QuestaSim/questasim/linux_x86_64
 CUSTOM_C_FOLDER="C_Code"
 BUILD_MODE=""
 VERSION_TYPE=""
@@ -81,6 +81,7 @@ mv irq.sv ref_fpga_sys_lite.sv
 
 if [ "$BUILD_MODE" = true ] && [ "$VERSION_TYPE" = REL ]; then
     cd sim
+    ../scripts/generate_cpu_instance.py
     $MODELSIM_ROOT_DIR/vsim -c -do main_tb.do >> ../sim_result.txt
     cd ..
 

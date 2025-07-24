@@ -1,5 +1,5 @@
 `timescale 1ns / 1ns
-import cpu_reg_package::*;
+import cpu_sim_package::*;
 module main_tb;
 
     logic                     clk   = 1'b0;
@@ -46,7 +46,7 @@ module main_tb;
         end
     endtask
 
-    main_rv32 m1 (
+    cpu_sim_top m1 (
         .clk_i           (clk),
         .reset_i         (reset),
         .external_data_o (ex_data_o),
@@ -61,7 +61,7 @@ module main_tb;
         .cpu_we_o        (we_o)
     );
 
-    uart #(
+    cpu_sim_uart #(
         .ClkFreq         (FPGAClkSpeed),
         .BaudRate        (BaudRateCPU),
         .ParityBit       ("none"),
@@ -79,7 +79,7 @@ module main_tb;
         .data_in_ready_o (tx_busy)
     );
 
-    bus_rv32 cpubus();
+    cpu_sim_bus_rv32 cpubus();
 
     assign cpubus.clk_i     = clk;
     assign cpubus.reset_i   = reset;
@@ -91,14 +91,14 @@ module main_tb;
     assign cpu_halt_i       = cpubus.cpu_halt_i; 
     assign cpubus.we_o      = we_o;
 
-    bus_rv32 cdc_cpubus [num_entries] ();
+    cpu_sim_bus_rv32 cdc_cpubus [num_entries] ();
 
     logic cdc_clocks [num_entries];
 
     assign cdc_clocks[test_cdc_e] = clk_cdc;
     assign cdc_clocks[test_cdc2_e] = clk_cdc;
 
-    bus_cdc #(
+    cpu_sim_bus_cdc #(
         .bus_cdc_start_address (get_address_start(test_cdc_e)),
         .bus_cdc_end_address   (get_address_end(test_cdc2_e))
     ) cdc_1 (

@@ -1,0 +1,27 @@
+#CPU Config File
+#Parameters follow Name : Value : Width (Optional)
+#BUILTIN_MODULES are included modules
+#Modules follow enumeration name : Enable TRUE/FALSE : Address Bounds
+#Place extra modules not included by default in USER_MODULES
+
+BUILTIN_PARAMETERS:
+    FPGAClkSpeed              : 40000000
+    BaudRateCPU               : 230400
+    address_width             : 16
+    data_width                : 32
+    RAM_Size                  : 10240
+    Program_CPU_Start_Address : 'h0 : {31:0}
+    VersionStringSize         : 64
+    EnableCPUIRQ              : 0
+    
+USER_PARAMETERS:
+    
+BUILTIN_MODULES:
+    ram_e            : TRUE : {0, RAM_Size}
+    version_string_e : TRUE : {'h8000, 'h8000+(VersionStringSize-1)*4}
+    io_e             : TRUE : {'h9000, 'h900C}
+    uart_e           : TRUE : {'h9100, 'h9110}
+    
+USER_MODULES:
+    test_cdc_e  : TRUE : {'h9200, 'h9200}
+    test_cdc2_e : TRUE : {'h9300, 'h9300}

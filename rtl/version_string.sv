@@ -1,7 +1,3 @@
-`ifdef SIM
-    `include "version_string.svh"
-`endif 
-
 module version_string #(
     parameter BaseAddress = 0,
     parameter NumCharacters = 44,
