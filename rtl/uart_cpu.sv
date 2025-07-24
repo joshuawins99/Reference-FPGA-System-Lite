@@ -1,12 +1,13 @@
 module uart_cpu #(
     parameter BaseAddress     = 0,
+    parameter address_width   = 0,
     parameter FPGAClkSpeed    = 0,
     parameter UARTBaudRate    = 0,
     parameter Address_Wording = 1
 )(
     input logic clk_i,
     input logic reset_i,
-    input logic [15:0] address_i,
+    input logic [address_width-1:0] address_i,
     input logic [7:0] data_i,
     output logic [7:0] data_o,
     input logic rd_wr_i,

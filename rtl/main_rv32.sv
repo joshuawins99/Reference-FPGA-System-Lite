@@ -143,7 +143,7 @@ module main_rv32 (
     bram_contained_rv32 #(
         .BaseAddress    (get_address_start(ram_e)),
         .EndAddress     (get_address_end(ram_e)),
-        .address_width  (16),
+        .address_width  (address_width),
         .data_width     (32),
         .ram_size       (RAM_Size),
         .pre_fill       (1),
@@ -190,6 +190,7 @@ module main_rv32 (
 
     uart_cpu #(
         .BaseAddress     (get_address_start(uart_e)),
+        .address_width   (address_width),
         .FPGAClkSpeed    (FPGAClkSpeed),
         .UARTBaudRate    (BaudRateCPU),
         .Address_Wording (4)
