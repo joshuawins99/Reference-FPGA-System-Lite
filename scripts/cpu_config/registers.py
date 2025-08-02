@@ -196,7 +196,7 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
 
         for section in section_list:
             lines.append("")
-            lines.append(f"  Section: {section}")
+            lines.append(f"    Section: {section}")
 
             for module_name, module in cpu_config.get(section, {}).items():
                 if module_name == "BaseAddress" or not isinstance(module, dict):
@@ -222,11 +222,11 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                 mod_desc_str = mod_meta.get("description", "")
 
                 lines.append("")
-                lines.append(f"    -> Module: {mod_name_str} ({module_name})")
-                lines.append(f"       - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
-                lines.append(f"       - Register Count: {reg_count}")
+                lines.append(f"        -> Module: {mod_name_str} ({module_name})")
+                lines.append(f"            - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
+                lines.append(f"            - Register Count: {reg_count}")
                 if mod_desc_str:
-                    lines.append(f"       - Description: {mod_desc_str}")
+                    lines.append(f"            - Description: {mod_desc_str}")
 
                 # Register metadata
                 for i in range(reg_count):
@@ -238,12 +238,12 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                     reg_perm_str = reg_info.get("permissions", "")
 
                     lines.append("")
-                    lines.append(f"        -> {reg_key}: {reg_name_str}")
-                    lines.append(f"           - Address: 'h{reg_addr:04X}")
+                    lines.append(f"            -> {reg_key}: {reg_name_str}")
+                    lines.append(f"                - Address: 'h{reg_addr:04X}")
                     if reg_desc_str:
-                        lines.append(f"           - Description: {reg_desc_str}")
+                        lines.append(f"                - Description: {reg_desc_str}")
                     if reg_perm_str:
-                        lines.append(f"           - Permissions: {reg_perm_str}")
+                        lines.append(f"                - Permissions: {reg_perm_str}")
 
     output = "\n".join(lines)
     if (print_to_console == True):
