@@ -102,11 +102,12 @@ Optionally, under the CONFIG_PARAMETERS section is the C_Code_Folder variable. T
 
 There are three more flags as part of generate_cpu_instance.py:
 
-    --print-all-registers -> prints all the registers and their addresses to console
+    --print-all-registers  -> prints all the registers and their addresses to console
     --print-user-registers -> prints only the user registers to console
-    --save-all-registers -> save all registers info to a file
-    --save-user-registers -> save user registers info to a file 
-    --gen-headers -> generates C and Python headers for use in a program 
+    --save-all-registers   -> save all registers info to a file
+    --save-user-registers  -> save user registers info to a file 
+    --gen-headers          -> generates C and Python headers for use in a program 
+    --configs-path         -> specify base folder that the script should look for config folders
 
 An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32:
 ```Verilog

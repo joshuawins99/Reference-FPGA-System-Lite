@@ -131,7 +131,7 @@ def save_systemverilog_files(parsed_configs, base_directory):
 
         print(f"Generated and saved SystemVerilog package for {package_name}: {os.path.abspath(output_file)}")
 
-def update_cpu_modules_file(parsed_configs, base_directory, reference_file="../../ref_fpga_sys_lite.sv"):
+def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_fpga_sys_lite.sv"):
     """Reads a reference SystemVerilog file, replaces import statements and updates bus logic based on enabled modules."""
     current_directory = os.path.dirname(os.path.abspath(__file__))
     reference_file = os.path.join(current_directory, reference_file)
