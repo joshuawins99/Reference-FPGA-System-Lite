@@ -226,7 +226,12 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                 lines.append(f"            - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
                 lines.append(f"            - Register Count: {reg_count}")
                 if mod_desc_str:
-                    lines.append(f"            - Description: {mod_desc_str}")
+                    indent = " " * 12
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"{indent}- Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n{indent}              {line}"
+                    lines.append(formatted_desc)
 
                 # Register metadata
                 for i in range(reg_count):
@@ -241,7 +246,12 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                     lines.append(f"            -> {reg_key}: {reg_name_str}")
                     lines.append(f"                - Address: 'h{reg_addr:04X}")
                     if reg_desc_str:
-                        lines.append(f"                - Description: {reg_desc_str}")
+                        indent = " " * 16
+                        desc_lines = reg_desc_str.split('\n')
+                        formatted_desc = f"{indent}- Description: {desc_lines[0]}"
+                        for line in desc_lines[1:]:
+                            formatted_desc += f"\n{indent}              {line}"
+                        lines.append(formatted_desc)
                     if reg_perm_str:
                         lines.append(f"                - Permissions: {reg_perm_str}")
 

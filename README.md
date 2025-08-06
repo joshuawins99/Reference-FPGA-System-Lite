@@ -100,7 +100,7 @@ python3 generate_cpu_instance.py
 ```
 Optionally, under the CONFIG_PARAMETERS section is the C_Code_Folder variable. This variable is used when running the generate_cpu_instance.py script with the ``--build`` flag. This allows the python script to both build and place the output files in the correct directory. Multiple unique instances of this system can be used in a single project easily this way. This option will call the build_single_module.sh for each instance of config file automatically so the script itself doesn't have to be run if using it this way.
 
-There are three more flags as part of generate_cpu_instance.py:
+Below are the list of flags as part of generate_cpu_instance.py:
 
     --print-all-registers  -> prints all the registers and their addresses to console
     --print-user-registers -> prints only the user registers to console
@@ -200,6 +200,9 @@ In order to do reads and writes to the built in I/O module, the start and end ad
 
 >>> print(readFPGA(36864)) -> Should return the decimal equivalent of the data on the input register
 ```
+
+Running the ``help`` command in a serial console connected to the system will show the available commands. Documentation of these commands is not currently available. The io.c file in C_Code has the relevent information for using these commands.
+
 ## Adding Additional Functionality
 
 By creating a new custom module that follows the port structure of the bus_rv32 interface, one can create an accessory module that has custom functionality and can be accessed by the cpu. In order to add a new module, an additional entry must be added to the USER_MODULES list in the cpu_config.txt file and a start and end address must be given to the mdoule. Data reads from custom modules are expected to have their data available one clock cycle after the accompanying address is given. If a combinatorial output is desired, use of the address_reg logic ensures that data is valid when the CPU expects it.

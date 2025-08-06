@@ -49,10 +49,10 @@ def parse_config(file_path):
             # Handle multiline continuation
             if pending_key:
                 if line.endswith("\\"):
-                    pending_value += " " + line.rstrip("\\").strip()
+                    pending_value += "\n " + line.rstrip("\\").strip()
                     continue
                 else:
-                    pending_value += " " + line.strip()
+                    pending_value += "\n " + line.strip()
                     # Finalize the pending value
                     if current_register:
                         config_data[current_section][current_module]["regs"][current_register][pending_key] = pending_value.strip()

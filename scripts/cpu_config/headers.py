@@ -77,10 +77,18 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                 # === Module Documentation ===
                 c_lines.append(f"// Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
-                    c_lines.append(f"// Module Description: {mod_desc_str}")
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"// Module Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n//                    {line}"
+                    c_lines.append(formatted_desc)
                 py_lines.append(f"# Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
-                    py_lines.append(f"# Module Description: {mod_desc_str}")
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"# Module Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n#                    {line}"
+                    py_lines.append(formatted_desc)
 
                 enum_name = f"{module_id}_REG"
 
@@ -108,7 +116,11 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                     c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
                     c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
                     if reg_desc:
-                        c_addr_macros.append(f"// Register Description: {reg_desc}")
+                        desc_lines = reg_desc.split('\n')
+                        formatted_desc = f"// Register Description: {desc_lines[0]}"
+                        for line in desc_lines[1:]:
+                            formatted_desc += f"\n//                      {line}"
+                        c_addr_macros.append(formatted_desc)
                     if reg_perm:
                         c_addr_macros.append(f"// Register Permissions: {reg_perm}")
 
@@ -117,7 +129,11 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                     py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
                     if reg_desc:
                         #py_enum_entries.append(f"    #    {reg_desc}")
-                        py_addr_lines.append(f"# Register Description: {reg_desc}")
+                        desc_lines = reg_desc.split('\n')
+                        formatted_desc = f"# Register Description: {desc_lines[0]}"
+                        for line in desc_lines[1:]:
+                            formatted_desc += f"\n#                      {line}"
+                        py_addr_lines.append(formatted_desc)
                     if reg_perm:
                         py_addr_lines.append(f"# Register Permissions: {reg_perm}")
                     
