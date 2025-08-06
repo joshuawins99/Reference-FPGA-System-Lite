@@ -22,7 +22,7 @@ void enqueueCommand(const char *cmd) {
         }
         cmdQueue.commands[cmdQueue.tail][i] = '\0';
 
-        cmdQueue.tail = cmdQueue.tail + 1;
+        ++cmdQueue.tail;
     }
 }
 
@@ -31,7 +31,7 @@ char* dequeueCommand() {
 
     if (!isQueueEmpty()) {
         cmd = cmdQueue.commands[cmdQueue.head];
-        cmdQueue.head = cmdQueue.head + 1;
+        ++cmdQueue.head;
         return cmd;
     }
     return NULL;
@@ -268,7 +268,7 @@ char* executeCommandsSerial(char *data) {
     
     for (i = 0; i < num_commands; ++i) {
         if (stringMatch(data, commands[i].command, commands[i].length) == 1) {
-            if (queueMode && stringMatch(commands[i].command, EXIT_QUEUE, commands[i].length) == 0) {
+            if (queueMode == 1 && commands[i].command != EXIT_QUEUE) {
                 enqueueCommand(data);
                 return NULL;
             }
@@ -276,6 +276,15 @@ char* executeCommandsSerial(char *data) {
         }
     }
     return NULL;
+}
+
+void UARTCommand (char *data) {
+    char *commandOutput;
+
+    commandOutput = executeCommandsSerial(data);
+    if (commandOutput != NULL) {
+        Print(1, commandOutput);
+    }
 }
 
 void ReadUART() {
@@ -290,10 +299,7 @@ void ReadUART() {
         } else {
             readuart[char_iter] = (char) 0;
             char_iter = 0;
-            commandOutput = executeCommandsSerial(&readuart[0]);
-            if (commandOutput != NULL) {
-                Print(1, commandOutput);
-            }
+            UARTCommand(readuart);
         }
     }
 }

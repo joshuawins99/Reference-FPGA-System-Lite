@@ -47,6 +47,7 @@ char* readFPGA (uint32_t);
 void writeFPGA (uint32_t, uint32_t);
 unsigned char stringMatch (const char *, const char *, unsigned char);
 char* executeCommandsSerial(char *);
+void UARTCommand(char *);
 void ReadUART();
 uint32_t checkAddress(uint32_t);
 ParsedCommand ParseCommand(char *);
