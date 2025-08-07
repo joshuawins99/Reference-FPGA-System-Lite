@@ -48,6 +48,7 @@ Now create a config file named cpu_config.txt and place it in the cpu_test folde
 #If a parameter is to be used for number of registers:
 #   my_module_e : TRUE : AUTO : {Parameter}
 #Manually placed register locations can also be placed at the same time
+#If individual registers are not wished to be displayed, a : NOEXPREGS can be placed at the end of a module
 #Place extra modules not included by default in USER_MODULES
 
 CONFIG_PARAMETERS:
@@ -66,8 +67,8 @@ BUILTIN_PARAMETERS:
 USER_PARAMETERS:
     
 BUILTIN_MODULES:
-    ram_e : TRUE : {0, RAM_Size},
-    version_string_e : TRUE : {'h8000, 'h8000+(VersionStringSize-1)*4},
+    ram_e : TRUE : {0, RAM_Size} : NOEXPREGS,
+    version_string_e : TRUE : {'h8000, 'h8000+(VersionStringSize-1)*4} : NOEXPREGS,
     io_e : TRUE : {'h9000, 'h900C},
     uart_e : TRUE : {'h9100, 'h9110}
     

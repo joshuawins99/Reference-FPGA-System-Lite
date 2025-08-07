@@ -220,6 +220,7 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "")
+                mod_reg_expand_str = mod_meta.get("expand_regs", '')
 
                 lines.append("")
                 lines.append(f"        -> Module: {mod_name_str} ({module_name})")
@@ -234,26 +235,27 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                     lines.append(formatted_desc)
 
                 # Register metadata
-                for i in range(reg_count):
-                    reg_addr = start_addr + i * reg_width_bytes
-                    reg_key = f"Reg{i}"
-                    reg_info = module.get("regs", {}).get(reg_key, {})
-                    reg_name_str = reg_info.get("name", f"Reg{i}")
-                    reg_desc_str = reg_info.get("description", "")
-                    reg_perm_str = reg_info.get("permissions", "")
+                if (mod_reg_expand_str == 'FALSE'):
+                    for i in range(reg_count):
+                        reg_addr = start_addr + i * reg_width_bytes
+                        reg_key = f"Reg{i}"
+                        reg_info = module.get("regs", {}).get(reg_key, {})
+                        reg_name_str = reg_info.get("name", f"Reg{i}")
+                        reg_desc_str = reg_info.get("description", "")
+                        reg_perm_str = reg_info.get("permissions", "")
 
-                    lines.append("")
-                    lines.append(f"            -> {reg_key}: {reg_name_str}")
-                    lines.append(f"                - Address: 'h{reg_addr:04X}")
-                    if reg_desc_str:
-                        indent = " " * 16
-                        desc_lines = reg_desc_str.split('\n')
-                        formatted_desc = f"{indent}- Description: {desc_lines[0]}"
-                        for line in desc_lines[1:]:
-                            formatted_desc += f"\n{indent}              {line}"
-                        lines.append(formatted_desc)
-                    if reg_perm_str:
-                        lines.append(f"                - Permissions: {reg_perm_str}")
+                        lines.append("")
+                        lines.append(f"            -> {reg_key}: {reg_name_str}")
+                        lines.append(f"                - Address: 'h{reg_addr:04X}")
+                        if reg_desc_str:
+                            indent = " " * 16
+                            desc_lines = reg_desc_str.split('\n')
+                            formatted_desc = f"{indent}- Description: {desc_lines[0]}"
+                            for line in desc_lines[1:]:
+                                formatted_desc += f"\n{indent}              {line}"
+                            lines.append(formatted_desc)
+                        if reg_perm_str:
+                            lines.append(f"                - Permissions: {reg_perm_str}")
 
     output = "\n".join(lines)
     if (print_to_console == True):

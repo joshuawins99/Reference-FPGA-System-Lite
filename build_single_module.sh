@@ -44,20 +44,17 @@ cd ..
 
 cd rtl
 echo -n '`define version_string ' > version_string.svh
-if [ "$BUILD_MODE" = true ]; then
-    if [ "$VERSION_TYPE" = REL ]; then
-        echo -n '"' >> version_string.svh
-        echo -n "REL " >> version_string.svh
-        cat ../version >> version_string.svh
-    else
-        echo -n '"' >> version_string.svh
-        echo -n "DEV " >> version_string.svh
-        echo -n "$VERSION_TYPE" >> version_string.svh
-    fi
-else 
+if [ "$VERSION_TYPE" = REL ]; then
+    echo -n '"' >> version_string.svh
+    echo -n "REL " >> version_string.svh
+    cat ../version >> version_string.svh
+else
     echo -n '"' >> version_string.svh
     echo -n "DEV " >> version_string.svh
     git rev-parse --verify HEAD | cut -c1-7 | xargs echo -n >> version_string.svh
+    echo -n '(' >> version_string.svh
+    cat ../version >> version_string.svh
+    echo -n ')' >> version_string.svh
 fi
 echo -n ' ' >> version_string.svh
 date --date 'now' '+%a %b %d %r %Z %Y' | sed -e 's/$/"/' -e 's/,/","/g' >> version_string.svh

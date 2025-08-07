@@ -66,9 +66,10 @@ def parse_config(file_path):
             section_match = re.match(r"^(\w+):\s*(.*)?$", line)
             #param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
             param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|\{[^}]+\}|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
-            module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}", line)
-            auto_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}", line)
-            auto_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)", line)
+            module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}(?:\s*:\s*(\w+))?", line)
+            auto_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}(?:\s*:\s*(\w+))?", line)
+            auto_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)(?:\s*:\s*(\w+))?", line)
+
             reg_match = re.match(r"(Reg\d+)\s*:", line)
             name_match = re.match(r"Name\s*:\s*(.+)", line)
             desc_match = re.match(r"Description\s*:\s*(.+)", line)
@@ -99,6 +100,8 @@ def parse_config(file_path):
                 key = auto_expr_match.group(1)
                 flag = auto_expr_match.group(2)
                 reg_count = auto_expr_match.group(3)
+                expand_regs = auto_expr_match.group(4)
+
                 config_data[current_section][key] = {
                     "flag": flag,
                     "auto": True,
@@ -106,6 +109,11 @@ def parse_config(file_path):
                     "metadata": {},
                     "regs": {}
                 }
+
+                if (expand_regs == "NOEXPREGS"):
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
+                else:
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
                 current_module = key
                 current_register = None
 
@@ -113,6 +121,8 @@ def parse_config(file_path):
                 key = auto_literal_match.group(1)
                 flag = auto_literal_match.group(2)
                 reg_count = int(auto_literal_match.group(3))
+                expand_regs = auto_literal_match.group(4)
+
                 config_data[current_section][key] = {
                     "flag": flag,
                     "auto": True,
@@ -120,6 +130,11 @@ def parse_config(file_path):
                     "metadata": {},
                     "regs": {}
                 }
+                
+                if (expand_regs == "NOEXPREGS"):
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
+                else:
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
                 current_module = key
                 current_register = None
 
@@ -127,12 +142,19 @@ def parse_config(file_path):
                 key = module_match.group(1)
                 flag = module_match.group(2)
                 bounds = [b.strip().rstrip(",") for b in module_match.group(3).split(",")]
+                expand_regs = module_match.group(4)
+
                 config_data[current_section][key] = {
                     "flag": flag,
                     "bounds": bounds,
                     "metadata": {},
                     "regs": {}
                 }
+
+                if (expand_regs == "NOEXPREGS"):
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
+                else:
+                    config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
                 current_module = key
                 current_register = None
 

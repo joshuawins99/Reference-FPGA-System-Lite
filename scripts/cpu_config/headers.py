@@ -73,6 +73,7 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "").strip()
+                mod_reg_expand_str = mod_meta.get("expand_regs", '')
 
                 # === Module Documentation ===
                 c_lines.append(f"// Module: {mod_name_str} ({module_name})")
@@ -101,41 +102,42 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                 py_enum_entries = []
                 py_addr_lines = []
 
-                for i in range(reg_count):
-                    addr = start_addr + i * reg_width_bytes
-                    reg_key = f"Reg{i}"
-                    reg_info = module.get("regs", {}).get(reg_key, {})
-                    reg_name_raw = reg_info.get("name", f"Reg{i}")
-                    reg_desc = reg_info.get("description", "").strip()
-                    reg_perm = reg_info.get("permissions", "").strip()
-                    reg_name_id = sanitize_identifier(reg_name_raw)
-                    entry_name = f"{module_id}_{reg_name_id}"
+                if (mod_reg_expand_str == 'FALSE'):
+                    for i in range(reg_count):
+                        addr = start_addr + i * reg_width_bytes
+                        reg_key = f"Reg{i}"
+                        reg_info = module.get("regs", {}).get(reg_key, {})
+                        reg_name_raw = reg_info.get("name", f"Reg{i}")
+                        reg_desc = reg_info.get("description", "").strip()
+                        reg_perm = reg_info.get("permissions", "").strip()
+                        reg_name_id = sanitize_identifier(reg_name_raw)
+                        entry_name = f"{module_id}_{reg_name_id}"
 
-                    # C enum entry
-                    comma = "," if i < reg_count - 1 else ""
-                    c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
-                    c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
-                    if reg_desc:
-                        desc_lines = reg_desc.split('\n')
-                        formatted_desc = f"// Register Description: {desc_lines[0]}"
-                        for line in desc_lines[1:]:
-                            formatted_desc += f"\n//                      {line}"
-                        c_addr_macros.append(formatted_desc)
-                    if reg_perm:
-                        c_addr_macros.append(f"// Register Permissions: {reg_perm}")
+                        # C enum entry
+                        comma = "," if i < reg_count - 1 else ""
+                        c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
+                        c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
+                        if reg_desc:
+                            desc_lines = reg_desc.split('\n')
+                            formatted_desc = f"// Register Description: {desc_lines[0]}"
+                            for line in desc_lines[1:]:
+                                formatted_desc += f"\n//                      {line}"
+                            c_addr_macros.append(formatted_desc)
+                        if reg_perm:
+                            c_addr_macros.append(f"// Register Permissions: {reg_perm}")
 
-                    # Python enum entry
-                    py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
-                    py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
-                    if reg_desc:
-                        #py_enum_entries.append(f"    #    {reg_desc}")
-                        desc_lines = reg_desc.split('\n')
-                        formatted_desc = f"# Register Description: {desc_lines[0]}"
-                        for line in desc_lines[1:]:
-                            formatted_desc += f"\n#                      {line}"
-                        py_addr_lines.append(formatted_desc)
-                    if reg_perm:
-                        py_addr_lines.append(f"# Register Permissions: {reg_perm}")
+                        # Python enum entry
+                        py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
+                        py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
+                        if reg_desc:
+                            #py_enum_entries.append(f"    #    {reg_desc}")
+                            desc_lines = reg_desc.split('\n')
+                            formatted_desc = f"# Register Description: {desc_lines[0]}"
+                            for line in desc_lines[1:]:
+                                formatted_desc += f"\n#                      {line}"
+                            py_addr_lines.append(formatted_desc)
+                        if reg_perm:
+                            py_addr_lines.append(f"# Register Permissions: {reg_perm}")
                     
                 #c_lines.append(f"typedef enum {{")
                 #c_lines.extend(c_enum_entries)
