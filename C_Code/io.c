@@ -127,30 +127,17 @@ ParsedCommand ParseCommand(char *input) {
     unsigned char field = 0;
     uint32_t val;
     char current_char;
-    unsigned char command_size = sizeof(result.command) - 1;
-    unsigned char rawValues_size = sizeof(result.rawValues[0]) - 1;
 
-    // Parse command
-    while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
-        if (j < command_size) {
-            result.command[j++] = current_char;
-        }
-        i++;
-    }
-    result.command[j] = '\0';
-    if (input[i] == ',') i++;
-
-    // Parse all values up to MAX_CMD_ARGS
     while (field < MAX_CMD_ARGS && input[i] != '\0' && input[i] != '\n') {
         j = 0;
         val = 0;
 
         while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
             if (current_char >= '0' && current_char <= '9') {
-                //val = val * 10 + (input[i] - '0');
+                //val = val * 10 + (current_char - '0');
                 val = (val << 3) + (val << 1) + (current_char - '0');
             }
-            if (j < rawValues_size) {
+            if (j < MAX_TOKEN_LENGTH-1) {
                 result.rawValues[field][j++] = current_char;
             }
             i++;
@@ -171,7 +158,7 @@ char* readFPGAWrapper(char *data) {
     ParsedCommand cmd_data;
     uint32_t addr_val;
     cmd_data = ParseCommand(data);
-    addr_val = checkAddress(cmd_data.values[0]);
+    addr_val = checkAddress(cmd_data.values[1]);
     return readFPGA(addr_val);
 }
 
@@ -179,8 +166,8 @@ char* writeFPGAWrapper(char *data) {
     ParsedCommand cmd_data;
     uint32_t addr_val;
     cmd_data = ParseCommand(data);
-    addr_val = checkAddress(cmd_data.values[0]);
-    writeFPGA(addr_val, cmd_data.values[1]);
+    addr_val = checkAddress(cmd_data.values[1]);
+    writeFPGA(addr_val, cmd_data.values[2]);
     return NULL;
 }
 
@@ -213,8 +200,8 @@ char* printQueueWrapper (char *data) {
 
 char* helpWrapper(char *data);
 
-const char READF[]       = "rFPGA,";
-const char WRITEF[]      = "wFPGA,";
+const char READF[]       = "rFPGA";
+const char WRITEF[]      = "wFPGA";
 const char RVERSION[]    = "readFPGAVersion";
 const char ENTER_QUEUE[] = "enterQueue";
 const char EXIT_QUEUE[]  = "exitQueue";

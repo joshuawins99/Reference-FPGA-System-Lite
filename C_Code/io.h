@@ -4,7 +4,7 @@
 
 #define VersionStringSize 64
 
-#define MAX_CMD_ARGS 2
+#define MAX_CMD_ARGS 3 // Command + arguments
 #define MAX_CMD_QUEUE 32
 #define MAX_LINE_LENGTH 40
 #define MAX_TOKEN_LENGTH 16
@@ -23,7 +23,6 @@ typedef struct {
 } command_entry;
 
 typedef struct {
-    char command[MAX_TOKEN_LENGTH];                 // Command name
     char rawValues[MAX_CMD_ARGS][MAX_TOKEN_LENGTH]; // Raw strings for each value
     uint32_t values[MAX_CMD_ARGS];                  // Parsed integers
     unsigned char valueCount;                       // Actual number of values found
