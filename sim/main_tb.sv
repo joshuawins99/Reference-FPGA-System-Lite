@@ -81,6 +81,8 @@ module main_tb;
 
     cpu_sim_bus_rv32 cpubus();
 
+    logic cdc_busy;
+
     assign cpubus.clk_i     = clk;
     assign cpubus.reset_i   = reset;
     assign cpubus.cpu_reset_o = reset;
@@ -88,7 +90,7 @@ module main_tb;
     assign cpubus.data_o    = cpu_data_o;
     assign cpu_data_i       = cpubus.data_i;
     assign cpubus.address_o = address;
-    assign cpu_halt_i       = cpubus.cpu_halt_i; 
+    assign cpu_halt_i       = cdc_busy; 
     assign cpubus.we_o      = we_o;
 
     cpu_sim_bus_rv32 cdc_cpubus [num_entries] ();
@@ -104,7 +106,8 @@ module main_tb;
     ) cdc_1 (
         .cdc_clks_i (cdc_clocks),
         .cpubus_i   (cpubus),
-        .cpubus_o   (cdc_cpubus)
+        .cpubus_o   (cdc_cpubus),
+        .busy_o     (cdc_busy)
     );
 
     logic [data_width-1:0] test_cdc_register = '0;

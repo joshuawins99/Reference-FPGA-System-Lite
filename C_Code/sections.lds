@@ -45,9 +45,11 @@ SECTIONS
   } > RAM
 
   /* Place stack at the top of RAM */
-  .stack : {
-    __stack_top = ALIGN(16, ORIGIN(RAM) + LENGTH(RAM)); /* Stack starts at the top of RAM */
-    __stack_end = __stack_top - 0x100; /* Reserve 256 bytes for stack */
-    . = __stack_end;
+  .stack (NOLOAD) : {
+    . = ALIGN(4);
+    __stack_end = .; /* Bottom of stack */
+    . = . + 0x100;   /* Reserve 256 bytes for stack */
+    __stack_top = .; /* Top of stack */
   } > RAM
+   _end = .;
 }

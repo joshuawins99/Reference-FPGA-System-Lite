@@ -8,6 +8,7 @@ rv32_gcc/*.mem
 rv32_gcc/*.map
 rv32_gcc/*.lds
 rv32_gcc/*.s
+rv32_gcc/*.su
 rtl/version_string.svh
 rtl/uart_vhdl/uart_vhd_cpu.v
 ref_fpga_sys_lite.sv

@@ -59,6 +59,7 @@ module main_rv32 (
     assign external_data_i           = cpubus.external_data_i;
     assign uart_rx_i                 = cpubus.uart_rx_i;
     assign cpubus.uart_tx_o          = uart_tx_o;
+    assign cpubus.we_ram_o           = we_ram_o;
 `endif
 
     logic irq_io;

@@ -226,7 +226,8 @@ cpu_test_bus_cdc #(
 ) cdc_1 (
     .cdc_clks_i            (cdc_clocks),
     .cpubus_i              (cpubus),
-    .cpubus_o              (cdc_cpubus)
+    .cpubus_o              (cdc_cpubus),
+    .busy_o                (cpubus.cpu_halt_i)
 );
 
 //In the clk_30 domain

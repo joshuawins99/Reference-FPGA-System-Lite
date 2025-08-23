@@ -5,7 +5,8 @@ module bus_cdc #(
 )(
     input logic      cdc_clks_i [num_entries],
     bus_rv32.cdc_in  cpubus_i,
-    bus_rv32.cdc_out cpubus_o   [num_entries]
+    bus_rv32.cdc_out cpubus_o   [num_entries],
+    output logic     busy_o
 );
 
     //Function to take address and find the "index" from the packed array.
@@ -61,7 +62,7 @@ module bus_cdc #(
         data:    cpubus_i.data_o
     };
 
-    assign cpubus_i.cpu_halt_i = |(read_pending[end_num_entry_index:start_num_entry_index]) | |(busy_src[end_num_entry_index:start_num_entry_index]);
+    assign busy_o = |(read_pending[end_num_entry_index:start_num_entry_index]) | |(busy_src[end_num_entry_index:start_num_entry_index]);
 
     //Register incoming address to determine if its changed.
     always_ff @(posedge cpuside_clk) begin
