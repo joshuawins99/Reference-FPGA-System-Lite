@@ -8,13 +8,14 @@ def generate_verilog(mem_file, output_file, words=256, offset=0, prefill=1):
     num_entries = len(mem_data)
 
     verilog_code = f"""module picosoc_mem #(
+    parameter address_width = 16,
     parameter integer WORDS = {words},
     parameter integer OFFSET = {offset},
     parameter integer PREFILL = {prefill}
 ) (
     input clk,
     input [3:0] wen,
-    input [15:0] addr,
+    input [address_width-1:0] addr,
     input [31:0] wdata,
     output reg [31:0] rdata
 );

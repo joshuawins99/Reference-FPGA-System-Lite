@@ -28,15 +28,16 @@ module bram_contained_rv32 #(
     end
 
     picosoc_mem #(
-        .WORDS   (ram_size/4),
-        .PREFILL (pre_fill),
-        .OFFSET  (pre_fill_start)
+        .address_width (address_width),
+        .WORDS         (ram_size/4),
+        .PREFILL       (pre_fill),
+        .OFFSET        (pre_fill_start)
     ) psram1 (
-        .clk   (clk),
-        .addr  (ram_addr >> 2),
-        .wen   (ram_we),
-        .wdata (din),
-        .rdata (dout)
+        .clk           (clk),
+        .addr          (ram_addr >> 2),
+        .wen           (ram_we),
+        .wdata         (din),
+        .rdata         (dout)
     );
     
 endmodule

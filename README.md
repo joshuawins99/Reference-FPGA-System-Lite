@@ -259,3 +259,9 @@ user_module_2_e #(
 );
 ```
 Modules are still expected to have valid data on a read one cycle after the address is valid. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results.
+
+## License
+This project is licensed under the CERN Open Hardware Licence Version 2 - Weakly Reciprocal (CERN-OHL-W-2.0). See the [LICENSE](./LICENSE) file for details.
+
+## Contribution Request
+While this repository is licensed under the CERN-OHL-W license, I kindly ask — as a courtesy — that any fixes or improvements be contributed back to the upstream project, provided they do not expose or infringe upon proprietary internal designs or trade secrets.
