@@ -4,6 +4,7 @@ module bus_cdc #(
     parameter bus_cdc_end_address   = 0
 )(
     input logic      cdc_clks_i [num_entries],
+    input logic      module_busy_en_i [num_entries],
     bus_rv32.cdc_in  cpubus_i,
     bus_rv32.cdc_out cpubus_o   [num_entries],
     output logic     busy_o
@@ -28,6 +29,7 @@ module bus_cdc #(
 
     typedef struct packed {
         logic                     we;
+        logic [3:0]               we_ram;
         logic [address_width-1:0] address;
         logic [data_width-1:0]    data;
     } bus_signals_t;
@@ -51,18 +53,20 @@ module bus_cdc #(
     logic [num_entries-1:0]   data_module_to_cpu_valid = '0;
     bus_signals_t             data_module_to_cpu_synced [num_entries];
     logic [num_entries-1:0]   data_module_to_cpu_synced_valid;
-    logic [num_entries-1:0]   read_pending = '0;
+    logic [num_entries-1:0]   transaction_pending = '0;
+    logic                     module_busy_prev [num_entries];
 
     assign cpuside_cpu_reset   = cpubus_i.cpu_reset_o;
     assign cpuside_clk         = cpubus_i.clk_i;
 
     assign data_cpu_to_module = '{
         we:      cpubus_i.we_o, 
+        we_ram:  cpubus_i.we_ram_o,
         address: cpubus_i.address_o, 
         data:    cpubus_i.data_o
     };
 
-    assign busy_o = |(read_pending[end_num_entry_index:start_num_entry_index]) | |(busy_src[end_num_entry_index:start_num_entry_index]);
+    assign busy_o = |(transaction_pending[end_num_entry_index:start_num_entry_index]) | |(busy_src[end_num_entry_index:start_num_entry_index]);
 
     //Register incoming address to determine if its changed.
     always_ff @(posedge cpuside_clk) begin
@@ -85,9 +89,23 @@ module bus_cdc #(
                 end
             end
 
-            //Register data_module_to_cpu_valid because module is expected to have valid data one clock cycle later.
+            always_ff @(posedge cdc_clks_i[i]) begin //Store previous busy to check for falling edge
+                if (module_busy_en_i[i] == 1'b1) begin
+                    module_busy_prev[i] <= cpubus_o[i].module_busy_i;
+                end else begin
+                    module_busy_prev[i] <= 1'b0;
+                end
+            end
+
             always_ff @(posedge cdc_clks_i[i]) begin
-                data_module_to_cpu_valid[i] <= !data_cpu_to_module_synced[i].we & data_cpu_to_module_synced_valid[i];
+                data_module_to_cpu_valid[i] <= 1'b0;
+                if (module_busy_en_i[i] == 1'b0) begin //Default case where valid data is expected one cycle later with no busy
+                    data_module_to_cpu_valid[i] <= data_cpu_to_module_synced_valid[i];
+                end else begin //Other case where a busy is provided by the module
+                    if (cpubus_o[i].module_busy_i == 1'b0 && module_busy_prev[i] == 1'b1) begin
+                        data_module_to_cpu_valid[i] <= 1'b1;
+                    end
+                end
             end
 
             bus_cdc_bridge #(
@@ -111,14 +129,14 @@ module bus_cdc #(
             //Handle halting of cpu in order to wait for data from a downstream module to return back to cpu domain.
             always_ff @(posedge cpuside_clk) begin
                 if (cpuside_cpu_reset == 1'b0) begin
-                    if (data_cpu_to_module_valid[i] == 1'b1 && data_cpu_to_module.we == 1'b0) begin
-                        read_pending[i] <= 1'b1;
+                    if (data_cpu_to_module_valid[i] == 1'b1) begin
+                        transaction_pending[i] <= 1'b1;
                     end
                     if (data_module_to_cpu_synced_valid[i] == 1'b1) begin
-                        read_pending[i] <= 1'b0;
+                        transaction_pending[i] <= 1'b0;
                     end
                 end else begin
-                    read_pending[i] <= 1'b0;
+                    transaction_pending[i] <= 1'b0;
                 end
             end
 
@@ -144,6 +162,7 @@ module bus_cdc #(
             assign data_module_to_cpu[i].data    = cpubus_o[i].data_i[i];
             assign data_module_to_cpu[i].address = '0;
             assign data_module_to_cpu[i].we      = '0;
+            assign data_module_to_cpu[i].we_ram  = '0;
 
             assign cpubus_o[i].clk_i             = cdc_clks_i[i];
             assign cpubus_o[i].cpu_reset_o       = moduleside_cpu_reset[i];
@@ -153,6 +172,7 @@ module bus_cdc #(
             assign cpubus_o[i].data_o            = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].data : '0;
             assign cpubus_o[i].address_o         = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].address : '0;
             assign cpubus_o[i].we_o              = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].we : '0;
+            assign cpubus_o[i].we_ram_o          = (data_cpu_to_module_synced_valid[i] == 1) ? data_cpu_to_module_synced[i].we_ram : '0;
         end
     endgenerate
 

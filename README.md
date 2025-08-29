@@ -218,6 +218,11 @@ logic cdc_clocks [num_entries];
 assign cdc_clocks[user_module_1_e] = clk_30; //One clock
 assign cdc_clocks[user_module_2_e] = clk_100; //Another Clock
 
+logic module_busy_en [num_entries];
+
+assign module_busy_en[user_module_1_e] = 0;
+assign module_busy_en[user_module_2_e] = 1;
+
 cpu_test_bus_rv32 cdc_cpubus [num_entries]();
 
 cpu_test_bus_cdc #(
@@ -225,6 +230,7 @@ cpu_test_bus_cdc #(
     .bus_cdc_end_address   (get_address_end(user_module_2_e))
 ) cdc_1 (
     .cdc_clks_i            (cdc_clocks),
+    .module_busy_en_i      (module_busy_en_i),
     .cpubus_i              (cpubus),
     .cpubus_o              (cdc_cpubus),
     .busy_o                (cpubus.cpu_halt_i)
@@ -255,10 +261,11 @@ user_module_2_e #(
     .address_i     (cdc_cpubus[user_module_2_e].address_o),
     .data_i        (cdc_cpubus[user_module_2_e].data_o),
     .data_o        (cdc_cpubus[user_module_2_e].data_i[user_module_2_e]),
-    .rd_wr_i       (cdc_cpubus[user_module_2_e].we_o)
+    .rd_wr_i       (cdc_cpubus[user_module_2_e].we_o),
+    .busy_o        (cdc_cpubus[user_module_2_e].module_busy_i)
 );
 ```
-Modules are still expected to have valid data on a read one cycle after the address is valid. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results.
+Modules are have the option to either have their data available one clock cycle later as normal, or by setting a 1 in the module_busy_en_i bitmask, have a busy signal to have the cdc module wait until valid data is signaled from the downstream module. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results.
 
 ## License
 This project is licensed under the CERN Open Hardware Licence Version 2 - Weakly Reciprocal (CERN-OHL-W-2.0). See the [LICENSE](./LICENSE) file for details.
