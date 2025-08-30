@@ -1,6 +1,6 @@
+module main_rv32 
 import cpu_reg_package::*;
-
-module main_rv32 (
+(
 `ifndef SIM
     bus_rv32.from_cpu  cpubus
 `else

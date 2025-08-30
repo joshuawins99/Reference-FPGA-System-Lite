@@ -1,5 +1,6 @@
+module bus_cdc 
 import cpu_reg_package::*;
-module bus_cdc #(
+#(
     parameter bus_cdc_start_address = 0,
     parameter bus_cdc_end_address   = 0
 )(

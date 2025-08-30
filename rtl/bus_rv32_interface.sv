@@ -1,6 +1,6 @@
+interface bus_rv32;
 import cpu_reg_package::*;
 
-interface bus_rv32;
     logic                     clk_i;
     logic                     reset_i;
     logic [address_width-1:0] address_o;
