@@ -58,8 +58,7 @@ import cpu_reg_package::*;
         input  we_o,
         input  we_ram_o,
         input  data_o,
-        input  cpu_reset_o,
-        output cpu_halt_i
+        input  cpu_reset_o
     );
 
     modport cdc_out (

@@ -107,7 +107,8 @@ module main_tb;
 
     cpu_sim_bus_cdc #(
         .bus_cdc_start_address (get_address_start(test_cdc_e)),
-        .bus_cdc_end_address   (get_address_end(test_cdc2_e))
+        .bus_cdc_end_address   (get_address_end(test_cdc2_e)),
+        .cdc_bypass_mask       ('0)
     ) cdc_1 (
         .cdc_clks_i       (cdc_clocks),
         .module_busy_en_i (module_busy_en),

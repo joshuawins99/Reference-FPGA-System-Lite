@@ -227,10 +227,11 @@ cpu_test_bus_rv32 cdc_cpubus [num_entries]();
 
 cpu_test_bus_cdc #(
     .bus_cdc_start_address (get_address_start(user_module_1_e)),
-    .bus_cdc_end_address   (get_address_end(user_module_2_e))
+    .bus_cdc_end_address   (get_address_end(user_module_2_e)),
+    .cdc_bypass_mask       ('0)
 ) cdc_1 (
     .cdc_clks_i            (cdc_clocks),
-    .module_busy_en_i      (module_busy_en_i),
+    .module_busy_en_i      (module_busy_en),
     .cpubus_i              (cpubus),
     .cpubus_o              (cdc_cpubus),
     .busy_o                (cpubus.cpu_halt_i)
@@ -265,7 +266,9 @@ user_module_2_e #(
     .busy_o        (cdc_cpubus[user_module_2_e].module_busy_i)
 );
 ```
-Modules are have the option to either have their data available one clock cycle later as normal, or by setting a 1 in the module_busy_en_i bitmask, have a busy signal to have the cdc module wait until valid data is signaled from the downstream module. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results.
+Modules are have the option to either have their data available one clock cycle later as normal, or by setting a 1 in the module_busy_en_i bitmask, have a busy signal to have the cdc module wait until valid data is signaled from the downstream module. These modules follow exactly the same behavior as ones that would in the same clock domain. The bus_cdc module will actively halt the cpu automatically to wait for the read data from the downstream modules to be valid. The bus_cdc_start_address and bus_cdc_end_address represent the bounds to reserve for cdc modules. It is recommended to use the get_address_start() and get_address_end() functions with the first and last enumeration to get the desired results. 
+
+For tools like Quartus which do a poor job of resolving drivers, a cdc_bypass_mask is provided that allows for hooking up all modules to the bus_cdc module and not have the extra latency or utilization penalty for doing so. Configuring downstream modules this way in which some may need to be in a separate clock domain makes Quartus happy and not complain about multiple drivers.
 
 ## License
 This project is licensed under the CERN Open Hardware Licence Version 2 - Weakly Reciprocal (CERN-OHL-W-2.0). See the [LICENSE](./LICENSE) file for details.
