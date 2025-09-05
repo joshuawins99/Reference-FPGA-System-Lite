@@ -100,18 +100,13 @@ module main_tb;
     assign cdc_clocks[test_cdc_e] = clk_cdc;
     assign cdc_clocks[test_cdc2_e] = clk_cdc;
 
-    logic module_busy_en [num_entries];
-
-    assign module_busy_en[test_cdc_e] = 0;
-    assign module_busy_en[test_cdc2_e] = 0;
-
     cpu_sim_bus_cdc #(
         .bus_cdc_start_address (get_address_start(test_cdc_e)),
         .bus_cdc_end_address   (get_address_end(test_cdc2_e)),
-        .cdc_bypass_mask       ('0)
+        .cdc_bypass_mask       ('0),
+        .module_busy_en_mask   ('0)
     ) cdc_1 (
         .cdc_clks_i       (cdc_clocks),
-        .module_busy_en_i (module_busy_en),
         .cpubus_i         (cpubus),
         .cpubus_o         (cdc_cpubus),
         .busy_o           (cdc_busy)

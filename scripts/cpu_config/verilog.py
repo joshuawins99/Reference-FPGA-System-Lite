@@ -104,6 +104,60 @@ package {package_name};
 
     typedef logic [data_width-1:0] data_reg_inputs_t [0:num_entries-1];
 
+    localparam int num_entries_width = $clog2(num_entries) + 2;
+
+    function logic [num_entries_width-1:0] add_cdc_entry (
+        input logic [$clog2(num_entries)-1:0] index,
+        input logic bypass_en,
+        input logic busy_en
+    );
+        logic [num_entries_width-1:0] result;
+        result[$clog2(num_entries)-1:0] = index;
+        result[$clog2(num_entries)]     = bypass_en;
+        result[num_entries_width-1]     = busy_en;
+        return result;
+    endfunction
+
+    function logic [num_entries-1:0] build_bypass_mask(
+        input logic [num_entries_width*num_entries-1:0] bypass_config
+    );
+        logic [num_entries-1:0] mask;
+        mask = {{{{num_entries{{1'b1}}}}}};
+
+        for (int i = 0; i < num_entries; i++) begin
+            logic [$clog2(num_entries)-1:0] index;
+            logic bypass_en;
+
+            index     = bypass_config[i*num_entries_width +: $clog2(num_entries)];
+            bypass_en = bypass_config[i*num_entries_width + $clog2(num_entries)];
+
+            mask[index] = bypass_en;
+        end
+
+        return mask;
+    endfunction
+
+    function logic [num_entries-1:0] build_busy_mask(
+        input logic [num_entries_width*num_entries-1:0] bypass_config
+    );
+        logic [num_entries-1:0] mask;
+        mask = '0;
+
+        for (int i = 0; i < num_entries; i++) begin
+            logic [$clog2(num_entries)-1:0] index;
+            logic busy_en;
+
+            index    = bypass_config[i*num_entries_width +: $clog2(num_entries)];
+            busy_en  = bypass_config[i*num_entries_width + $clog2(num_entries) + 1];
+
+            mask[index] = busy_en;
+        end
+
+        return mask;
+    endfunction
+
+    typedef logic [num_entries_width*num_entries-1:0] bypass_config_t;
+
 endpackage
     """
 

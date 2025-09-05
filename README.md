@@ -218,17 +218,25 @@ logic cdc_clocks [num_entries];
 assign cdc_clocks[user_module_1_e] = clk_30; //One clock
 assign cdc_clocks[user_module_2_e] = clk_100; //Another Clock
 
-logic module_busy_en [num_entries];
+localparam bypass_config_t bypass_config = {
+    //add_cdc_entry(enum, cdc bypass, busy enable)
+    add_cdc_entry(ram_e,            1, 0),
+    add_cdc_entry(version_string_e, 1, 0),
+    add_cdc_entry(io_e,             1, 0),
+    add_cdc_entry(user_module_1_e,  0, 0),
+    add_cdc_entry(user_module_2_e,  0, 1),
+};
 
-assign module_busy_en[user_module_1_e] = 0;
-assign module_busy_en[user_module_2_e] = 1;
+localparam logic [num_entries-1:0] cdc_bypass_mask = build_bypass_mask(bypass_config);
+localparam logic [num_entries-1:0] module_busy_en_mask = build_busy_mask(bypass_config);
 
 cpu_test_bus_rv32 cdc_cpubus [num_entries]();
 
 cpu_test_bus_cdc #(
     .bus_cdc_start_address (get_address_start(user_module_1_e)),
     .bus_cdc_end_address   (get_address_end(user_module_2_e)),
-    .cdc_bypass_mask       ('0)
+    .cdc_bypass_mask       (cdc_bypass_mask),
+    .module_busy_en_mask   (module_busy_en_mask)
 ) cdc_1 (
     .cdc_clks_i            (cdc_clocks),
     .module_busy_en_i      (module_busy_en),

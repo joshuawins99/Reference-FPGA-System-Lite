@@ -3,10 +3,10 @@ import cpu_reg_package::*;
 #(
     parameter                         bus_cdc_start_address = 0,
     parameter                         bus_cdc_end_address   = 0,
-    parameter logic [num_entries-1:0] cdc_bypass_mask
+    parameter logic [num_entries-1:0] cdc_bypass_mask,
+    parameter logic [num_entries-1:0] module_busy_en_mask
 )(
     input logic      cdc_clks_i [num_entries],
-    input logic      module_busy_en_i [num_entries],
     bus_rv32.cdc_in  cpubus_i,
     bus_rv32.cdc_out cpubus_o   [num_entries],
     output logic     busy_o
@@ -91,13 +91,14 @@ import cpu_reg_package::*;
                 assign cpubus_o[i].cpu_reset_o = cpubus_i.cpu_reset_o;
 
                 always_comb begin
-                    if (module_busy_en_i[i] == 1) begin
+                    if (module_busy_en_mask[i] == 1) begin
                         cdc_bypass_busy[i] = cpubus_o[i].module_busy_i;
                     end else begin
                         cdc_bypass_busy[i] = 0;
                     end
                 end 
                 assign busy_src[i] = 0;
+                assign transaction_pending[i] = 0;
             end else begin //Synchronize bus signals
                 assign cdc_bypass_busy[i] = 0;
                 
@@ -115,7 +116,7 @@ import cpu_reg_package::*;
                 end
 
                 always_ff @(posedge cdc_clks_i[i]) begin //Store previous busy to check for falling edge
-                    if (module_busy_en_i[i] == 1'b1) begin
+                    if (module_busy_en_mask[i] == 1'b1) begin
                         module_busy_prev[i] <= cpubus_o[i].module_busy_i;
                     end else begin
                         module_busy_prev[i] <= 1'b0;
@@ -124,7 +125,7 @@ import cpu_reg_package::*;
 
                 always_ff @(posedge cdc_clks_i[i]) begin
                     data_module_to_cpu_valid[i] <= 1'b0;
-                    if (module_busy_en_i[i] == 1'b0) begin //Default case where valid data is expected one cycle later with no busy
+                    if (module_busy_en_mask[i] == 1'b0) begin //Default case where valid data is expected one cycle later with no busy
                         data_module_to_cpu_valid[i] <= data_cpu_to_module_synced_valid[i];
                     end else begin //Other case where a busy is provided by the module
                         if (cpubus_o[i].module_busy_i == 1'b0 && module_busy_prev[i] == 1'b1) begin
