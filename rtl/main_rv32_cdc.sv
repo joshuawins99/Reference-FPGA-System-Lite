@@ -1,7 +1,8 @@
 module main_rv32_cdc
 import cpu_reg_package::*;
 #(
-    parameter logic [num_entries-1:0] cdc_bypass_mask
+    parameter logic [num_entries-1:0] cdc_bypass_mask,
+    parameter logic [num_entries-1:0] module_busy_en_mask
 )(
     input  logic                  clk_i,
     input  logic                  reset_i,
@@ -12,7 +13,6 @@ import cpu_reg_package::*;
     input  logic                  irq_i,
     input  logic                  external_cpu_halt_i,
     input  logic                  cdc_clks_i [num_entries],
-    input  logic                  module_busy_en_i [num_entries],
     bus_rv32.cdc_out              cdc_cpubus [num_entries]
 );
 
@@ -55,10 +55,10 @@ import cpu_reg_package::*;
     bus_cdc #(
         .bus_cdc_start_address (get_address_start(0)),
         .bus_cdc_end_address   (get_address_end(num_entries-1)),
-        .cdc_bypass_mask       (cdc_bypass_mask)
+        .cdc_bypass_mask       (cdc_bypass_mask),
+        .module_busy_en_mask   (module_busy_en_mask)
     ) cdc_1 (
         .cdc_clks_i            (cdc_clks_i),
-        .module_busy_en_i      (module_busy_en_i),
         .cpubus_i              (cpubus),
         .cpubus_o              (cdc_cpubus_internal),
         .busy_o                (cdc_busy)
