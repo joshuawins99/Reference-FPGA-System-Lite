@@ -89,7 +89,15 @@ import cpu_reg_package::*;
                 assign cpubus_o[i].address_o   = cpubus_i.address_o;
                 assign cpubus_o[i].data_o      = cpubus_i.data_o;
                 assign cpubus_o[i].cpu_reset_o = cpubus_i.cpu_reset_o;
-                assign cdc_bypass_busy[i]      = cpubus_o[i].module_busy_i;
+
+                always_comb begin
+                    if (module_busy_en_i[i] == 1) begin
+                        cdc_bypass_busy[i] = cpubus_o[i].module_busy_i;
+                    end else begin
+                        cdc_bypass_busy[i] = 0;
+                    end
+                end 
+                assign busy_src[i] = 0;
             end else begin //Synchronize bus signals
                 assign cdc_bypass_busy[i] = 0;
                 

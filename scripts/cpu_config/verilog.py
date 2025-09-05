@@ -153,6 +153,10 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
 
         updated_content = re.sub(r"\bmodule main_rv32\b", f"module {package_base_name}_top", updated_content)
 
+        updated_content = re.sub(r"\bmodule main_rv32_cdc\b", f"module {package_base_name}_cdc_top", updated_content)
+
+        updated_content = re.sub(r"\bmain_rv32\b", f"{package_base_name}_top", updated_content)
+
         MODULES_LIST = {
             "cpu_rv32",
             "bram_contained_rv32",
@@ -177,7 +181,8 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             "bus_rv32",
             "bus_cdc_bridge",
             "edge_synchronizer",
-            "bus_cdc"
+            "bus_cdc",
+            "main_rv32_cdc"
         }
 
         for module_pattern in MODULES_LIST:

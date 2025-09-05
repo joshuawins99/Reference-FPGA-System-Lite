@@ -12,3 +12,4 @@ rtl/uart/*
 rtl/bus_cdc_bridge.sv
 rtl/edge_synchronizer.sv
 rtl/bus_cdc.sv
+rtl/main_rv32_cdc.sv
