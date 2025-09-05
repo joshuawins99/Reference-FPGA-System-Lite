@@ -98,7 +98,6 @@ import cpu_reg_package::*;
                     end
                 end 
                 assign busy_src[i] = 0;
-                assign transaction_pending[i] = 0;
             end else begin //Synchronize bus signals
                 assign cdc_bypass_busy[i] = 0;
                 
