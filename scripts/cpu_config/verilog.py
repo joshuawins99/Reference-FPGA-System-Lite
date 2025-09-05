@@ -53,6 +53,14 @@ def generate_systemverilog(config):
     module_addresses = "\n".join(address_entries)
     parameters = "\n".join(parameter_entries)
 
+    # Identify the last enabled built-in module
+    enabled_modules = [module for module, details in builtin_modules.items() if details["flag"] == "TRUE"]
+
+    if enabled_modules:
+        last_enabled_module = enabled_modules[-1] + "+1"
+    else:
+        last_enabled_module = 0
+
     systemverilog_code = f"""
 package {package_name};
 
@@ -78,6 +86,8 @@ package {package_name};
 {module_addresses}
     }};
 
+    localparam last_enabled_builtin_module = {last_enabled_module};
+    
     function [address_width-1:0] get_address_start (
         input [$clog2(num_entries):0] val
     );
@@ -118,18 +128,21 @@ package {package_name};
         return result;
     endfunction
 
+    typedef logic [num_entries_width*(num_entries-last_enabled_builtin_module)-1:0] bypass_config_t;
+
     function logic [num_entries-1:0] build_bypass_mask(
-        input logic [num_entries_width*num_entries-1:0] bypass_config
+        input bypass_config_t bypass_config
     );
         logic [num_entries-1:0] mask;
-        mask = {{{{num_entries{{1'b1}}}}}};
+        mask = {{num_entries{{1'b1}}}};
 
-        for (int i = 0; i < num_entries; i++) begin
+        for (int i = last_enabled_builtin_module; i < num_entries; i++) begin
+            int entry_idx;
             logic [$clog2(num_entries)-1:0] index;
             logic bypass_en;
-
-            index     = bypass_config[i*num_entries_width +: $clog2(num_entries)];
-            bypass_en = bypass_config[i*num_entries_width + $clog2(num_entries)];
+            entry_idx = i - last_enabled_builtin_module;
+            index     = bypass_config[entry_idx*num_entries_width +: $clog2(num_entries)];
+            bypass_en = bypass_config[entry_idx*num_entries_width + $clog2(num_entries)];
 
             mask[index] = bypass_en;
         end
@@ -138,25 +151,24 @@ package {package_name};
     endfunction
 
     function logic [num_entries-1:0] build_busy_mask(
-        input logic [num_entries_width*num_entries-1:0] bypass_config
+        input bypass_config_t bypass_config
     );
         logic [num_entries-1:0] mask;
         mask = '0;
 
-        for (int i = 0; i < num_entries; i++) begin
+        for (int i = last_enabled_builtin_module; i < num_entries; i++) begin
+            int entry_idx;
             logic [$clog2(num_entries)-1:0] index;
             logic busy_en;
-
-            index    = bypass_config[i*num_entries_width +: $clog2(num_entries)];
-            busy_en  = bypass_config[i*num_entries_width + $clog2(num_entries) + 1];
+            entry_idx = i - last_enabled_builtin_module;
+            index    = bypass_config[entry_idx*num_entries_width +: $clog2(num_entries)];
+            busy_en  = bypass_config[entry_idx*num_entries_width + $clog2(num_entries) + 1];
 
             mask[index] = busy_en;
         end
 
         return mask;
     endfunction
-
-    typedef logic [num_entries_width*num_entries-1:0] bypass_config_t;
 
 endpackage
     """
@@ -260,6 +272,7 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             last_enabled_module = enabled_modules[-1]
             updated_content = updated_content.replace("for (int i = 0; i <= uart_e;", f"for (int i = 0; i <= {last_enabled_module};")
             updated_content = updated_content.replace("for (int i = uart_e+1;", f"for (int i = {last_enabled_module}+1;")
+
         else:
             # No built-in modules enabled, comment out the first loop entirely
             updated_content = updated_content.replace(
