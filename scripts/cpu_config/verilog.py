@@ -248,7 +248,9 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
             "bus_cdc_bridge",
             "edge_synchronizer",
             "bus_cdc",
-            "main_rv32_cdc"
+            "main_rv32_cdc",
+            "serv*",
+            "wishbone_to_native_mem"
         }
 
         for module_pattern in MODULES_LIST:
