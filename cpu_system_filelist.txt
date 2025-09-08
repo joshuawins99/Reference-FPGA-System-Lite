@@ -1,5 +1,7 @@
 rtl/main_rv32.sv
-rtl/picorv32/*
+rtl/picorv32/*.*
+rtl/picorv32/serv/rtl/*
+rtl/picorv32/serv/servile/*
 rtl/bus_rv32_interface.sv
 rtl/picosoc_mem.v
 rtl/bram_contained_rv32.sv

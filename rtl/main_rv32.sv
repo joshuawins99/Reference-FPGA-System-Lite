@@ -124,22 +124,43 @@ import cpu_reg_package::*;
         end
     end
 
-    cpu_rv32 #(
-        .ProgramStartAddress (Program_CPU_Start_Address),
-        .StackAddress        (),
-        .address_width       (address_width),
-        .EnableCPUIRQ        (EnableCPUIRQ)
-    ) cpu1 (
-        .clk_i      (clk_i),
-        .reset_i    (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
-        .address_o  (address),
-        .cpu_halt_i (cpu_halt_i),
-        .data_i     (data_reg),
-        .data_o     (cpu_data_o),
-        .we_o       (cpu_we_o),
-        .we_ram_o   (we_ram_o),
-        .irq_i      (irq_combined)
-    );
+    generate
+        if (UseSERV == 1) begin
+            cpu_rv32_serv #(
+                .ProgramStartAddress (Program_CPU_Start_Address),
+                .StackAddress        (),
+                .address_width       (address_width),
+                .EnableCPUIRQ        (EnableCPUIRQ)
+            ) cpu1 (
+                .clk_i      (clk_i),
+                .reset_i    (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
+                .address_o  (address),
+                .cpu_halt_i (cpu_halt_i),
+                .data_i     (data_reg),
+                .data_o     (cpu_data_o),
+                .we_o       (cpu_we_o),
+                .we_ram_o   (we_ram_o),
+                .irq_i      (irq_combined)
+            );
+        end else begin
+            cpu_rv32 #(
+                .ProgramStartAddress (Program_CPU_Start_Address),
+                .StackAddress        (),
+                .address_width       (address_width),
+                .EnableCPUIRQ        (EnableCPUIRQ)
+            ) cpu1 (
+                .clk_i      (clk_i),
+                .reset_i    (reset & reset_initial), //Only reset on power up since the program can not be reloaded into ram
+                .address_o  (address),
+                .cpu_halt_i (cpu_halt_i),
+                .data_i     (data_reg),
+                .data_o     (cpu_data_o),
+                .we_o       (cpu_we_o),
+                .we_ram_o   (we_ram_o),
+                .irq_i      (irq_combined)
+            );
+        end
+    endgenerate
 
     bram_contained_rv32 #(
         .BaseAddress    (get_address_start(ram_e)),

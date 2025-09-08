@@ -62,7 +62,8 @@ BUILTIN_PARAMETERS:
     RAM_Size : 10240,
     Program_CPU_Start_Address : 'h0 : {31:0},
     VersionStringSize : 64,
-    EnableCPUIRQ : 0
+    EnableCPUIRQ : 0,
+    UseSERV : 0 #Toggles the use of either PicoRV32(0) or SERV(1)
     
 USER_PARAMETERS:
     
