@@ -15,7 +15,8 @@ module servile_native #(
     input  logic [31:0]              data_i,
     output logic [3:0]               write_strb_o,
     output logic                     data_valid_o,
-    input  logic                     data_valid_i
+    input  logic                     data_valid_i,
+    input  logic                     irq_i
 );
 
     localparam csr_regs = with_csr*4;
@@ -85,7 +86,7 @@ module servile_native #(
     ) cpu (
         .i_clk          (clk_i),
         .i_rst          (reset_i),
-        .i_timer_irq    (0),
+        .i_timer_irq    (irq_i),
 
         .o_wb_mem_adr   (wb_mem_adr),
         .o_wb_mem_dat   (wb_mem_dat),

@@ -55,7 +55,8 @@ module cpu_rv32_serv #(
         .data_i              (data_i),
         .write_strb_o        (we_ram_o),
         .data_valid_o        (data_valid),
-        .data_valid_i        (mem_ready & data_valid)
+        .data_valid_i        (mem_ready & data_valid),
+        .irq_i               (irq_i)
     );
 
     always_comb begin
