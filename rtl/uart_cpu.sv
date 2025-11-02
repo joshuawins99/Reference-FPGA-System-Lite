@@ -1,3 +1,27 @@
+/*@ModuleMetadataBegin
+Name : UART
+Description : UART Controller
+Reg0 :
+    Name : Transmit Data
+    Description : Data to transmit
+    Permissions : Write
+Reg1 :
+    Name : Send Transmit Data
+    Description : Signal to send transmit data over UART
+    Permissions : Write
+Reg2 :
+    Name : Read Busy State
+    Description : Reads the current state of the UART transmission
+    Permissions : Read
+Reg3 :
+    Name : Read UART FIFO
+    Description : Pop a byte off the received FIFO data
+    Permissions : Read
+Reg4 :
+    Name : Read FIFO Status
+    Description : Read if the receiving FIFO is empty or not
+    Permissions : Read
+@ModuleMetadataEnd*/
 module uart_cpu #(
     parameter BaseAddress     = 0,
     parameter address_width   = 0,

@@ -47,6 +47,8 @@ Now create a config file named cpu_config.txt and place it in the cpu_test folde
 #A C Header and Python Header are also generated
 #If a parameter is to be used for number of registers:
 #   my_module_e : TRUE : AUTO : {Parameter}
+#If the script is to infer the number of registers:
+#   my_module_e : TRUE : AUTO
 #Manually placed register locations can also be placed at the same time
 #If individual registers are not wished to be displayed, a : NOEXPREGS can be placed at the end of a module
 #Place extra modules not included by default in USER_MODULES
@@ -94,6 +96,33 @@ USER_MODULES:
             Name : Read Timer Status
             Description : Reads if timer is still busy or finished
             Permissions : Read
+```
+
+***As of Version 3.12.0*** there is a Module_Include option to embed the register metadata into the modules themselves. Also included with this is the ability to leave a number or expression out after the AUTO as it can be automatically inferred through the register descriptions. Example:
+```
+USER_MODULES:
+    timer_e : TRUE : AUTO
+        Module_Include : ../../rtl/timer_cpu.sv
+```
+
+An example of the metadata block in a module is as shown here:
+```
+/*@ModuleMetadataBegin
+Name : Timer
+Description : Will wait until set value expires and then change the output
+Reg0 :
+    Name : Set Timer Value
+    Description : Sets the timer value
+    Permissions : Write
+Reg1 :
+    Name : Start Timer
+    Description : Starts the timer
+    Permissions : Write
+Reg2 :
+    Name : Read Timer Status
+    Description : Reads if timer is still busy or finished
+    Permissions : Read
+@ModuleMetadataEnd*/
 ```
 
 Run the python script to generate the module and package file:

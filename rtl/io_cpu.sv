@@ -1,3 +1,23 @@
+/*@ModuleMetadataBegin
+Name : IO
+Description : IO Controller and IRQ Mux
+Reg0 :
+    Name : External Inputs
+    Description : Read External Inputs as a bit field
+    Permissions : Read
+Reg1 :
+    Name : External Outputs
+    Description : Write to External Outputs as a bit field
+    Permissions : Read/Write
+Reg2 :
+    Name : IRQ Mask
+    Description : Set the mask bit corresponding to the External Input to trigger
+    Permissions : Read/Write
+Reg3 :
+    Name : IRQ Clear
+    Description : Reading from this register causes the IRQ to clear and will return the bit field with the triggered IRQ
+    Permissions : Read
+@ModuleMetadataEnd*/
 module io_cpu #(
     parameter BaseAddress     = 0,
     parameter address_width   = 16,
