@@ -11,7 +11,7 @@ This project was aimed to provide compatibility across a wide range of FPGAs fro
 ## Building
 There are a few requirements for building this system:
 * Bash
-* Python 3
+* Python >= 3.7
 * riscv32 gcc tools
 * Optional: sv2v
 
@@ -104,6 +104,17 @@ USER_MODULES:
     timer_e : TRUE : AUTO
         Module_Include : ../../rtl/timer_cpu.sv
 ```
+***As of Version 3.12.1*** it is also possible to define a path in the CONFIG_PARAMETERS section and use it like this.
+```
+CONFIG_PARAMETERS:
+    REF_PATH : ../../example
+
+USER_MODULES:
+    timer_e : TRUE : AUTO
+        Module_Include : {REF_PATH}/rtl/timer_cpu.sv
+```
+The path would resolve to ../../example/rtl/timer_cpu.sv
+
 
 An example of the metadata block in a module is as shown here:
 ```

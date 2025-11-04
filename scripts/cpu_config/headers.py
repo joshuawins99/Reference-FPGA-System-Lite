@@ -151,8 +151,8 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
 
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
-        print(f"C header saved to: {c_filename}")
+        print(f"C header for {cpu_name} saved to: {c_filename}")
 
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
-        print(f"Python header saved to: {py_filename}\n")
+        print(f"Python header for {cpu_name} saved to: {py_filename}\n")

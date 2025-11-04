@@ -181,8 +181,7 @@ def save_systemverilog_files(parsed_configs, base_directory):
         package_name = f"{package_base_name}_package"  # Append _package to the name
 
         if not config:  # Skip empty configs
-            print(f"Warning: No data found for {package_base_name}. Skipping.")
-            continue
+            raise RuntimeWarning(f"No data found for {package_base_name}. Skipping.")
 
         systemverilog_output = generate_systemverilog({package_base_name: config})
 
@@ -204,8 +203,7 @@ def update_cpu_modules_file(parsed_configs, base_directory, reference_file="ref_
     reference_file = os.path.abspath(reference_file)
     
     if not os.path.exists(reference_file):
-        print(f"Error: Reference file '{reference_file}' not found.")
-        return
+        raise FileNotFoundError(f"Reference file '{reference_file}' not found.")
 
     # Read the reference file content
     with open(reference_file, "r") as file:

@@ -20,7 +20,7 @@ def resolve_expression(expr, parameter_table=None):
                 elif radix == 'o':
                     return str(int(value, 8))
         except Exception:
-            print(f"[WARN] Could not parse SV literal: {raw}")
+            raise ValueError(f"Could not parse SV literal: {raw}")
         return raw  # fallback
 
     # Replace SV literals before parameter substitution
@@ -41,8 +41,7 @@ def resolve_expression(expr, parameter_table=None):
         result = eval(expr, {"__builtins__": None}, {})
         return result
     except Exception:
-        print(f"[WARN] Could not evaluate expression: {expr}")
-        return None
+        raise ValueError(f"Could not evaluate expression: {expr}")
 
 def build_parameter_table(parsed_configs):
     for cpu_name, cpu_config in parsed_configs.items():
@@ -68,14 +67,14 @@ def build_parameter_table(parsed_configs):
                         #print(f"[PASS {attempt+1}] Resolved {name} = {resolved_value}")
                         progress_made = True
                 except Exception as e:
-                    print(f"[ERROR] {name}: {e}")
+                    raise RuntimeError(f"Failed to resolve '{name}': {e}") from e
 
             if not progress_made:
                 #print(f"[INFO] No progress made on pass {attempt+1}")
                 break
 
         for name, val in unresolved.items():
-            print(f"[WARN] Unresolved: {name} = {val}")
+            raise RuntimeError(f"Unresolved: {name} = {val}")
             
     return parameter_table
 
@@ -115,8 +114,7 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                 )
                 section_ptr = (section_ptr + alignment - 1) & ~(alignment - 1)
             except Exception:
-                print(f"[WARN] Could not resolve BaseAddress for {section_name}")
-                section_ptr = 0x0000
+                raise RuntimeError(f"Could not resolve BaseAddress for {section_name}")
 
             # Step 4: Build local address mask for this section
             local_mask = []
@@ -130,11 +128,11 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                         end = resolve_expression(bounds[1], parameter_table)
                         if start is not None and end is not None:
                             local_mask.append((start, end))
-                            global_mask.append((start, end))
+                            global_mask.append((start, end)) 
                         else:
-                            print(f"[WARN] Skipping unresolved bounds for {mod_name}: {bounds}")
+                            raise RuntimeWarning(f"Skipping unresolved bounds for {mod_name}: {bounds}")
                     except Exception:
-                        print(f"[WARN] Could not resolve bounds for {mod_name}: {bounds}")
+                        raise RuntimeError(f"Could not resolve bounds for {mod_name}: {bounds}")
 
             # Step 5: Assign auto modules
             for mod_name, mod in section.items():
@@ -145,13 +143,11 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                     try:
                         reg_count = int(resolve_expression(raw_reg_count, parameter_table))
                     except Exception:
-                        print(f"[WARN] Failed to resolve register count for {mod_name}")
-                        continue
+                        raise RuntimeError(f"Failed to resolve register count for {mod_name}")
 
                     mod.pop("auto", None)
                     if reg_count < 1:
-                        print(f"[WARN] Invalid register count for {mod_name}")
-                        continue
+                        raise ValueError(f"Invalid register count for {mod_name}")
 
                     needed_size = reg_count * reg_width_bytes
                     start_addr = find_free_address(global_mask + local_mask, needed_size, section_ptr)
@@ -265,4 +261,4 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
         combined_file_path = file_path+"/"+file_name
         with open(combined_file_path, "w") as f:
             f.write(output)
-        print(f"\nRegister map saved to: {file_path}")
+        print(f"\nRegister map saved to: {combined_file_path}")

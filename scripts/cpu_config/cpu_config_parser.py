@@ -12,10 +12,28 @@ def get_c_code_folders(parsed_configs):
                 c_folders[cpu_name] = folder_info["value"]
     return c_folders
 
+def parse_file_path(input_param, config_data):
+    """
+    Replaces placeholders like {KEY} in input_param using CONFIG_PARAMETERS from config_data.
+    Each CONFIG_PARAMETERS entry is expected to be a dict with a 'value' key.
+    """
+    config_params = config_data.get("CONFIG_PARAMETERS", {}) #Get all items in CONFIG_PARAMETERS field
+    pattern = re.compile(r"\{(\w+)\}") #Create a match regex object
+
+    def replace_placeholder(match):
+        key = match.group(1)
+        param_entry = config_params.get(key)
+        if isinstance(param_entry, dict) and "value" in param_entry: #Checks if the parameter exists and has a value
+            return str(param_entry["value"]) #Returns the value as a string
+        else:
+            raise SyntaxError(f"CONFIG_PARAMETERS missing or malformed for key: '{key}'")
+
+    return pattern.sub(replace_placeholder, input_param) #Will call replace_placeholder as needed if a match occurs
+
 def list_folders(directory):
     """Returns a list of folders in the given directory."""
     if not os.path.exists(directory):
-        raise ValueError(f"The directory '{directory}' does not exist.")
+        raise FileNotFoundError(f"The directory '{directory}' does not exist.")
 
     return [f for f in os.listdir(directory) if os.path.isdir(os.path.join(directory, f))]
 
@@ -31,8 +49,8 @@ def check_config_files(directory, config_file_names):
         for folder in folders
     }
 
-def scrape_metadata(file_path, include_file, config_file_lines, current_line_index, has_name, has_description):
-    current_path = os.path.join(os.path.dirname(file_path), include_file)
+def scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description):
+    current_path = os.path.join(os.path.dirname(file_path), parse_file_path(include_file, config_data))
     inside_metadata = False
     metadata_block = []
     inside_register = False
@@ -75,6 +93,18 @@ def parse_config(file_path):
     got_register_description = False
     infer_module_registers = {}
 
+    # Pattern matching compile
+    section_re = re.compile(r"^(\w+):\s*(.*)?$")
+    param_re = re.compile(r"(\w+)\s*:\s*(\"[^\"]+\"|\{[^}]+\}|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?")
+    module_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}(?:\s*:\s*(\w+))?")
+    auto_expr_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}(?:\s*:\s*(\w+))?")
+    auto_literal_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)(?:\s*:\s*(\w+))?")
+    auto_simple_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO(?:\s*:\s*(\w+))?")
+    reg_re = re.compile(r"(Reg\d+)\s*:")
+    name_re = re.compile(r"Name\s*:\s*(.+)")
+    desc_re = re.compile(r"Description\s*:\s*(.+)")
+    permissions_re = re.compile(r"Permissions\s*:\s*(.+)")
+    module_include_re = re.compile(r"Module_Include\s*:\s*(.+)")
 
     with open(file_path, "r") as file:
         config_file_lines = file.readlines()
@@ -106,19 +136,17 @@ def parse_config(file_path):
                 continue
 
         # Pattern matching
-        section_match = re.match(r"^(\w+):\s*(.*)?$", line)
-        #param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
-        param_match = re.match(r"(\w+)\s*:\s*(\"[^\"]+\"|\{[^}]+\}|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?", line)
-        module_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}(?:\s*:\s*(\w+))?", line)
-        auto_expr_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}(?:\s*:\s*(\w+))?", line)
-        auto_literal_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)(?:\s*:\s*(\w+))?", line)
-        auto_simple_match = re.match(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO(?:\s*:\s*(\w+))?", line)
-
-        reg_match = re.match(r"(Reg\d+)\s*:", line)
-        name_match = re.match(r"Name\s*:\s*(.+)", line)
-        desc_match = re.match(r"Description\s*:\s*(.+)", line)
-        permissions_match = re.match(r"Permissions\s*:\s*(.+)", line)
-        module_include_match = re.match(r"Module_Include\s*:\s*(.+)", line)
+        section_match = section_re.match(line)
+        param_match = param_re.match(line)
+        module_match = module_re.match(line)
+        auto_expr_match = auto_expr_re.match(line)
+        auto_literal_match = auto_literal_re.match(line)
+        auto_simple_match = auto_simple_re.match(line)
+        reg_match = reg_re.match(line)
+        name_match = name_re.match(line)
+        desc_match = desc_re.match(line)
+        permissions_match = permissions_re.match(line)
+        module_include_match = module_include_re.match(line)
 
         if section_match:
             current_section = section_match.group(1)
@@ -242,16 +270,16 @@ def parse_config(file_path):
                 existing_metadata = config_data[current_section][current_module]["metadata"]
                 has_name = "name" in existing_metadata
                 has_description = "description" in existing_metadata
-                scrape_metadata(file_path, include_file, config_file_lines, current_line_index, has_name, has_description)
+                scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description)
             else:
-                raise ValueError(f"Registers Defined and Module Include Specified in Entry: '{current_module}'")
+                raise SyntaxError(f"Registers Defined and Module Include Specified in Entry: '{current_module}'")
             
         elif current_module and reg_match:
             got_register_name = False
             got_register_description = False
             current_register = reg_match.group(1)
             if current_register in config_data[current_section][current_module]["regs"]:
-                raise ValueError(f"Register '{current_register}' Redefinition in Entry: '{current_module}'")
+                raise SyntaxError(f"Register '{current_register}' Redefinition in Entry: '{current_module}'")
             config_data[current_section][current_module]["regs"].setdefault(current_register, {})
             if current_module in infer_module_registers:
                 infer_module_registers[current_module] += 1
@@ -286,9 +314,12 @@ def parse_config(file_path):
                 new_perm_val = "R/W"
             else:
                 new_perm_val = "UNKNOWN"
-                raise ValueError(f"Unknown permission string encountered: '{perm_val}'")
+                raise SyntaxError(f"Unknown permission string encountered: '{perm_val}'")
             if current_register:
                 config_data[current_section][current_module]["regs"][current_register]["permissions"] = new_perm_val
+        
+        else:
+            raise SyntaxError(f"'{line}' is not valid")
 
     #Populate Register Count for AUTO Inferred Registers
     for mod, count in infer_module_registers.items():
@@ -298,7 +329,7 @@ def parse_config(file_path):
     return config_data
 
 def process_configs(directory_path, config_file_names):
-    """Processes config files in multiple folders and returns parsed data without saving files."""
+    """Processes config files in multiple folders and returns parsed data."""
     parsed_configs = {}
 
     for folder in os.listdir(directory_path):
@@ -310,7 +341,7 @@ def process_configs(directory_path, config_file_names):
             potential_path = os.path.join(folder_path, name)
             if os.path.exists(potential_path):
                 config_path = potential_path
-                break  # Found a valid config file—no need to keep checking
+                break  # Found a valid config file; no need to keep checking
         if config_path:
             parsed_configs[folder] = parse_config(config_path)
 
