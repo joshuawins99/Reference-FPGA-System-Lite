@@ -271,6 +271,7 @@ def parse_config(file_path):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
             current_module = key
             current_register = None
+            current_field = None
 
         elif current_module and module_include_match:
             if (current_register == None):
