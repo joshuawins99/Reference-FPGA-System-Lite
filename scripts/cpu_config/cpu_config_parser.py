@@ -86,6 +86,7 @@ def parse_config(file_path):
     current_section = None
     current_module = None
     current_register = None
+    current_field = None
     pending_key = None
     pending_value = ""
     current_line_index = 0
@@ -101,8 +102,10 @@ def parse_config(file_path):
     auto_literal_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)(?:\s*:\s*(\w+))?")
     auto_simple_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO(?:\s*:\s*(\w+))?")
     reg_re = re.compile(r"(Reg\d+)\s*:")
+    field_re = re.compile(r"(Field\d+)\s*:")
     name_re = re.compile(r"Name\s*:\s*(.+)")
     desc_re = re.compile(r"Description\s*:\s*(.+)")
+    bounds_re =  re.compile(r"Bounds\s*:\s*\[\s*([^\]:]+)\s*:\s*([^\]]+)\s*\]")
     permissions_re = re.compile(r"Permissions\s*:\s*(.+)")
     module_include_re = re.compile(r"Module_Include\s*:\s*(.+)")
 
@@ -143,6 +146,8 @@ def parse_config(file_path):
         auto_literal_match = auto_literal_re.match(line)
         auto_simple_match = auto_simple_re.match(line)
         reg_match = reg_re.match(line)
+        field_match = field_re.match(line)
+        bounds_match = bounds_re.match(line)
         name_match = name_re.match(line)
         desc_match = desc_re.match(line)
         permissions_match = permissions_re.match(line)
@@ -192,6 +197,7 @@ def parse_config(file_path):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
             current_module = key
             current_register = None
+            current_field = None
 
         elif auto_literal_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
             key = auto_literal_match.group(1)
@@ -216,6 +222,7 @@ def parse_config(file_path):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
             current_module = key
             current_register = None
+            current_field = None
 
         elif auto_simple_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
             key = auto_simple_match.group(1)
@@ -239,6 +246,7 @@ def parse_config(file_path):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'FALSE'
             current_module = key
             current_register = None
+            current_field = None
             infer_module_registers[current_module] = 0
 
         elif module_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
@@ -274,6 +282,20 @@ def parse_config(file_path):
             else:
                 raise SyntaxError(f"Registers Defined and Module Include Specified in Entry: '{current_module}'")
             
+        elif current_register and field_match:
+            current_field = field_match.group(1)
+            config_data[current_section][current_module]["regs"][current_register].setdefault("fields", {})
+            config_data[current_section][current_module]["regs"][current_register]["fields"].setdefault(current_field, {})
+            config_data[current_section][current_module]["regs"][current_register]["fields"][current_field] = {
+                "name" : {},
+                "bounds" : {},
+                "description" : {}
+            }
+        
+        elif current_field and bounds_match:
+            bounds = [bounds_match.group(1), bounds_match.group(2)]
+            config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["bounds"] = bounds
+
         elif current_module and reg_match:
             got_register_name = False
             got_register_description = False
@@ -289,6 +311,8 @@ def parse_config(file_path):
             if current_register and not got_register_name:
                 config_data[current_section][current_module]["regs"][current_register]["name"] = name_val
                 got_register_name = True
+            elif current_field:
+                config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["name"] = name_val
             else:
                 config_data[current_section][current_module]["metadata"]["name"] = name_val
 
@@ -301,6 +325,8 @@ def parse_config(file_path):
                 if current_register and not got_register_description:
                     config_data[current_section][current_module]["regs"][current_register]["description"] = desc_val.strip()
                     got_register_description = True
+                elif current_field:
+                    config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["description"] = desc_val.strip()
                 else:
                     config_data[current_section][current_module]["metadata"]["description"] = desc_val.strip()
 

@@ -135,6 +135,24 @@ Reg2 :
     Permissions : Read
 @ModuleMetadataEnd*/
 ```
+***As of Version 3.13.0*** A new headers option is available through the new-python and new-c options to --gen-headers. Also bit fields are an option to be passed through to the new Python headers. They will be ignored otherwise. They are dictated by a Bounds entry. The bounds works like a normal vector in verilog where [msb:lsb] is the format. An example is shown here:
+```
+/*@ModuleMetadataBegin
+Name : Register
+Description : Register Description
+Reg0 :
+    Name : Zeroth Register
+    Description : Zeroth Register Description
+    Field0 :
+        Name : First Bit
+        Bounds : [0:0]
+        Description : First Bit Description
+    Field1 :
+        Name : More bits
+        Bounds : [5:1]
+        Description : Bits 5 to 1 field
+@ModuleMetadataEnd*/
+```
 
 Run the python script to generate the module and package file:
 ```bash

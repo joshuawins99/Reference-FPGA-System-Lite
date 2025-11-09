@@ -57,8 +57,24 @@ if "--save-user-registers" in sys.argv:
         dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=True, save_to_file=True, print_to_console=True)
 
 if "--gen-headers" in sys.argv:
+    new_python_header = False
+    new_c_header = False
+
+    index = sys.argv.index("--gen-headers") + 1
+    gen_headers_options = []
+
+    while index < len(sys.argv) and not sys.argv[index].startswith("--"):
+        gen_headers_options.append(sys.argv[index])
+        index +=1
+    
+    if "new-python" in gen_headers_options:
+        new_python_header = True
+    
+    if "new-c" in gen_headers_options:
+        new_c_header = True
+
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs, absolute_path, user_modules_only=False)
+        export_per_cpu_headers(parsed_configs, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header)
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)

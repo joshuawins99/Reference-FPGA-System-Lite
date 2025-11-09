@@ -9,8 +9,8 @@ class CompactRegisterBlock:
 
     def reg_at(self, index):
         return self.base + index * self.address_wording
-    
-def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, user_modules_only=False):
+
+def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False):
 
     def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
@@ -34,20 +34,244 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
         c_lines.append("    size_t count;")
         c_lines.append("    size_t address_wording;")
         c_lines.append("} CompactRegisterBlock;\n")
-        c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
+        if new_c_header:
+            c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))")
+            c_lines.append("#define REG_NAME(mod, reg) mod##_##reg")
+            c_lines.append("#define WRITE(mod, reg, val) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
+            c_lines.append("#define READ(mod, reg) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)))\n")
+        else:
+            c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
 
         # Python Header Boilerplate
-        py_lines.append("# Auto-generated register map header")
-        py_lines.append("from enum import Enum\n")
-        py_lines.append("class CompactRegisterBlock:")
-        py_lines.append("    def __init__(self, base, count, address_wording):")
-        py_lines.append("        self.base = base")
-        py_lines.append("        self.count = count")
-        py_lines.append("        self.address_wording = address_wording\n")
-        py_lines.append("    def reg_at(self, index):")
-        py_lines.append("        if index >= self.count:")
-        py_lines.append("            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')")
-        py_lines.append("        return self.base + index * self.address_wording\n")
+        if not new_python_header:
+            py_lines.append("# Auto-generated register map header")
+            py_lines.append("from enum import Enum\n")
+            py_lines.append("class CompactRegisterBlock:")
+            py_lines.append("    def __init__(self, base, count, address_wording):")
+            py_lines.append("        self.base = base")
+            py_lines.append("        self.count = count")
+            py_lines.append("        self.address_wording = address_wording\n")
+            py_lines.append("    def reg_at(self, index):")
+            py_lines.append("        if index >= self.count:")
+            py_lines.append("            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')")
+            py_lines.append("        return self.base + index * self.address_wording\n")
+        else:
+            py_lines.append("""
+# Auto-generated register map header
+from enum import Enum
+
+class BitField:
+    def __init__(self, fields):
+        # fields: list of tuples (name, pos, length, [desc])
+        self.fields = {}
+        for field in fields:
+            name, pos, length = field[:3]
+            desc = field[3] if len(field) > 3 else ''
+            self.fields[name] = (pos, length, desc)
+
+    def extract(self, value):
+        result = {}
+        for name, (pos, length, _) in self.fields.items():
+            mask = (1 << length) - 1
+            result[name] = (value >> pos) & mask
+        return result
+
+    def modify(self, original_value, updates):
+        value = original_value
+        for name, new_val in updates.items():
+            if name not in self.fields:
+                raise KeyError(f"Bit field '{name}' not defined")
+            pos, length, _ = self.fields[name]
+            mask = ((1 << length) - 1) << pos
+            value = (value & ~mask) | ((new_val << pos) & mask)
+        return value
+
+class BitProxy:
+    def __init__(self, register, name, pos, length, description=''):
+        self.register = register
+        self.name = name
+        self.pos = pos
+        self.length = length
+        self.description = description
+
+    def read(self, interface=None):
+        iface = interface or Register.interface
+        if 'R' not in self.register.permission:
+            raise PermissionError(f"Bit field '{self.name}' is write-only")
+        full_value = iface.read(self.register.address)
+        mask = (1 << self.length) - 1
+        return (full_value >> self.pos) & mask
+
+    def write(self, value, interface=None):
+        iface = interface or Register.interface
+        if 'W' not in self.register.permission:
+            raise PermissionError(f"Bit field '{self.name}' is read-only")
+        current = iface.read(self.register.address)
+        mask = ((1 << self.length) - 1) << self.pos
+        new_value = (current & ~mask) | ((value << self.pos) & mask)
+        iface.write(self.register.address, new_value)
+
+class Register:
+    interface = None
+
+    def __init__(self, name, address, permission, description='', bitfield=None):
+        self.name = name
+        self.address = address
+        self.permission = self._normalize_permission(permission)
+        self.description = description
+        self.bitfield = bitfield
+        self._bit_proxies = {}
+
+        if bitfield:
+            for field_name, (pos, length, desc) in bitfield.fields.items():
+                proxy = BitProxy(self, field_name, pos, length, desc)
+                self._bit_proxies[field_name] = proxy
+                setattr(self, field_name, proxy)
+
+    def _normalize_permission(self, perm):
+        if not perm:
+            return 'R/W'
+        return perm if perm in ('R', 'W', 'R/W') else 'R/W'
+
+    def read(self, interface=None):
+        iface = interface or Register.interface
+        if 'R' not in self.permission:
+            raise PermissionError(f"Register '{self.name}' is write-only")
+        return iface.read(self.address)
+
+    def write(self, value, interface=None):
+        iface = interface or Register.interface
+        if 'W' not in self.permission:
+            raise PermissionError(f"Register '{self.name}' is read-only")
+        iface.write(self.address, value)
+
+class CompactRegisterBlock:
+    def __init__(self, base, count, address_wording, module_defs=None, register_defs=None, sub_blocks=None):
+        self.base = base
+        self.count = count
+        self.address_wording = address_wording
+        self.name = module_defs[0] if module_defs else None
+        self.desc = module_defs[1] if module_defs else None
+        self._registers = {}
+        self._sub_blocks = {}
+
+        # Initialize registers
+        if register_defs:
+            for i, reg_def in enumerate(register_defs):
+                if i >= count:
+                    raise ValueError(f'Too many register definitions for count={count}')
+                name, perm = reg_def[0], reg_def[1]
+                desc = reg_def[2] if len(reg_def) > 2 else ''
+                bitfield_def = reg_def[3] if len(reg_def) > 3 else None
+                addr = self.reg_at(i)
+                bitfield = BitField(bitfield_def) if bitfield_def else None
+                reg = Register(name, addr, perm, desc, bitfield)
+                self._registers[name.lower()] = reg
+                setattr(self, name.lower(), reg)
+
+        # Initialize nested blocks
+        if sub_blocks:
+            for block_def in sub_blocks:
+                name, offset, block = block_def
+                block._rebase(self.base + offset)
+                self._sub_blocks[name.lower()] = block
+                setattr(self, name.lower(), block)
+
+    def reg_at(self, index):
+        if index >= self.count:
+            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')
+        return self.base + index * self.address_wording
+
+    def reg(self, index):
+        if index >= self.count:
+            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')
+        addr = self.base + index * self.address_wording
+        return Register(f'reg_{index}', addr, 'R/W')
+
+    def __getitem__(self, name):
+        name = name.lower()
+        if name in self._registers:
+            return self._registers[name]
+        elif name in self._sub_blocks:
+            return self._sub_blocks[name]
+        raise KeyError(f"No register or sub-block named '{name}'")
+
+    def __dir__(self):
+        return sorted(
+            list(self._registers.keys()) +
+            list(self._sub_blocks.keys()) +
+            ['describe', 'reg_at', 'reg']
+        )
+
+    def _rebase(self, new_base):
+        offset_delta = new_base - self.base
+        old_base = self.base
+        self.base = new_base
+
+        # Rebase registers
+        for i, reg in enumerate(self._registers.values()):
+            reg.address = self.reg_at(i)
+
+        # Rebase sub-blocks recursively
+        for name, block in self._sub_blocks.items():
+            relative_offset = block.base - old_base
+            block._rebase(new_base + relative_offset)
+
+    def describe(self, indent=0):
+        pad = '  ' * indent
+        if self.name:
+            print(f"{pad}Module Name: {self.name}")
+        if self.desc:
+            print(f"{pad}Module Description: {self.desc}")
+        print(f"{pad}Register Block @ 0x{self.base:04X} ({self.count} registers):")
+        for name, reg in self._registers.items():
+            if reg.description:
+                print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}] - {reg.description}")
+            else:
+                print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}]")
+            if reg.bitfield:
+                for field_name, (pos, length, desc) in reg.bitfield.fields.items():
+                    if desc:
+                        print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}] - {desc}")
+                    else:
+                        print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}]")
+        for name, block in self._sub_blocks.items():
+            print(f"{pad}  Sub-block '{name}' @ 0x{block.base:04X}:")
+            block.describe(indent + 2)
+
+class TransportInterface:
+    def write(self, data: str):
+        raise NotImplementedError
+    def read(self) -> str:
+        raise NotImplementedError
+
+class SerialTransport(TransportInterface):
+    def __init__(self, serial_obj):
+        self.serial = serial_obj
+    def write(self, data: str):
+        self.serial.write(data.encode('utf-8'))
+    def read(self) -> str:
+        read_data = self.serial.readline()
+        return read_data.decode('utf-8').strip()
+
+class FPGAInterface:
+    def __init__(self, transport: TransportInterface, queue_enabled=0):
+        self.transport = transport
+        self.queue_enabled = queue_enabled
+
+    def read(self, address):
+        cmd = f"rFPGA,{int(address)}\\n"
+        self.transport.write(cmd)
+        if self.queue_enabled == 0:
+            read_data = self.transport.read()
+            if not read_data:
+                return "Read Error"
+            return int(read_data)
+
+    def write(self, address, value):
+        cmd = f"wFPGA,{int(address)},{int(value)}\\n"
+        self.transport.write(cmd)
+                            """)
 
         # Parameter Table
         parameter_table = build_parameter_table(parsed_configs)
@@ -103,6 +327,8 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
                 py_addr_lines = []
 
                 if (mod_reg_expand_str == 'FALSE'):
+                    if new_c_header:
+                        c_addr_macros.append(f"enum {{")
                     for i in range(reg_count):
                         addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
@@ -115,30 +341,38 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
 
                         # C enum entry
                         comma = "," if i < reg_count - 1 else ""
-                        c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
-                        c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
-                        if reg_desc:
-                            desc_lines = reg_desc.split('\n')
-                            formatted_desc = f"// Register Description: {desc_lines[0]}"
-                            for line in desc_lines[1:]:
-                                formatted_desc += f"\n//                      {line}"
-                            c_addr_macros.append(formatted_desc)
-                        if reg_perm:
-                            c_addr_macros.append(f"// Register Permissions: {reg_perm}")
+                        if not new_c_header:
+                            c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
+                            c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
+                            if reg_desc:
+                                desc_lines = reg_desc.split('\n')
+                                formatted_desc = f"// Register Description: {desc_lines[0]}"
+                                for line in desc_lines[1:]:
+                                    formatted_desc += f"\n//                      {line}"
+                                c_addr_macros.append(formatted_desc)
+                            if reg_perm:
+                                c_addr_macros.append(f"// Register Permissions: {reg_perm}")
+                        else:
+                            if i < reg_count-1:
+                                c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i},")
+                            else:
+                                c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i}")
+                                c_addr_macros.append(f"}} {module_id}_REGISTERS_E;")
 
                         # Python enum entry
-                        py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
-                        py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
-                        if reg_desc:
-                            #py_enum_entries.append(f"    #    {reg_desc}")
-                            desc_lines = reg_desc.split('\n')
-                            formatted_desc = f"# Register Description: {desc_lines[0]}"
-                            for line in desc_lines[1:]:
-                                formatted_desc += f"\n#                      {line}"
-                            py_addr_lines.append(formatted_desc)
-                        if reg_perm:
-                            py_addr_lines.append(f"# Register Permissions: {reg_perm}")
-                    
+                        if not new_python_header:
+                            py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
+                            py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
+                            if reg_desc:
+                                #py_enum_entries.append(f"    #    {reg_desc}")
+                                desc_lines = reg_desc.split('\n')
+                                formatted_desc = f"# Register Description: {desc_lines[0]}"
+                                for line in desc_lines[1:]:
+                                    formatted_desc += f"\n#                      {line}"
+                                py_addr_lines.append(formatted_desc)
+                            if reg_perm:
+                                py_addr_lines.append(f"# Register Permissions: {reg_perm}")
+
                 #c_lines.append(f"typedef enum {{")
                 #c_lines.extend(c_enum_entries)
                 #c_lines.append(f"}} {enum_name};\n")
@@ -147,7 +381,67 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
 
                 #py_lines.extend(py_enum_entries)
                 py_lines.extend(py_addr_lines)
-                py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+                if not new_python_header:
+                    py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+                else:
+                    if (mod_reg_expand_str == 'FALSE'):
+                        register_defs = []
+                        field_defs = []
+                        for i in range(reg_count):
+                            reg_key = f"Reg{i}"
+                            reg_info = module.get("regs", {}).get(reg_key, {})
+                            field_info = reg_info.get("fields")
+                            reg_fields = []
+                            if field_info:
+                                for field_name, field_data in field_info.items():
+                                    try:
+                                        upper_bounds = resolve_expression(field_data['bounds'][0], parameter_table)
+                                        lower_bounds = resolve_expression(field_data['bounds'][1], parameter_table)
+                                        width = abs(upper_bounds - lower_bounds)+1
+                                    except Exception:
+                                        lower_bounds = width = 0
+                                    field_name = sanitize_identifier(field_data.get('name', ''))
+                                    reg_fields.append((field_name.lower(), lower_bounds, width, field_data.get('description', '')))
+                            else:
+                                reg_fields.append((None, None, None, None))
+                            field_defs.append(reg_fields)
+                            reg_name_raw = reg_info.get("name", f"Reg{i}")
+                            reg_name_id = sanitize_identifier(reg_name_raw)
+                            if (re.fullmatch(r'REG\d+', reg_name_id)): #Check for default name. Assume it shouldn't be exposed if it is
+                                continue
+                            reg_perm = reg_info.get("permissions", "").strip()
+                            reg_desc = reg_info.get("description", "").strip()
+                            if reg_perm not in ("R", "W", "R/W"):
+                                reg_perm = "R/W"
+                            register_defs.append((reg_name_id.lower(), reg_perm, reg_desc))
+                        if not(all(i[0] == '' for i in register_defs)): #Check to see if register name field is empty. If so, dont add register_defs
+                            py_lines.append(f"{module_id}_reg_defs = [")
+                            for idx, (name, perm, desc) in enumerate(register_defs):
+                                fields = field_defs[idx]
+                                if not (len(fields) == 1 and all(v is None for v in fields[0])):
+                                    formatted_fields = "[\n"
+                                    for f_name, f_low, f_width, f_desc in fields:
+                                        formatted_fields += f"    ({repr(f_name)}, {repr(f_low)}, {repr(f_width)}, {repr(f_desc)}),\n"
+                                    formatted_fields += "]"
+                                    line = f"({repr(name)}, {repr(perm)}, {repr(desc)}, {formatted_fields})"
+                                else:
+                                    line = f"({repr(name)}, {repr(perm)}, {repr(desc)})"
+                                if idx < len(register_defs)-1:
+                                    py_lines.append(line + ",")
+                                else:
+                                    py_lines.append(line)
+                                    py_lines.append(f"]")
+                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, {module_id}_reg_defs)\n")
+                        else:
+                            if mod_name_str or mod_desc_str:
+                                py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)})\n")
+                            else:
+                                py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+                    else:
+                        if mod_name_str or mod_desc_str:
+                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)})\n")
+                        else:
+                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
 
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
