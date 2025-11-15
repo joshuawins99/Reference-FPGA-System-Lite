@@ -43,8 +43,53 @@ def resolve_expression(expr, parameter_table=None):
     except Exception:
         raise ValueError(f"Could not evaluate expression: {expr}")
 
-def build_parameter_table(parsed_configs):
-    for cpu_name, cpu_config in parsed_configs.items():
+def reorder_tree(data):
+        """
+        Reorder tuples into tree order (depth-first).
+        Ensures:
+        - Parent before child
+        - Child before grandchild
+        - Roots and siblings sorted by parse index (last element in tuple)
+        - Works for arbitrary depth (n-levels deep)
+        """
+        result = {}
+
+        for cpu, tuples in data.items():
+            # Group children by parent
+            children = {}
+            for t in tuples:
+                parent = t[3]  # parent reference
+                children.setdefault(parent, []).append(t)
+
+            # Sort children of each parent by parse order (second to last element in tuple)
+            for parent in children:
+                children[parent].sort(key=lambda x: x[-2])
+
+            ordered = []
+
+            def dfs(parent):
+                if parent in children:
+                    for child in children[parent]:
+                        ordered.append(child)
+                        dfs(child[2])  # recurse into this child's children
+
+            # Find roots (those whose parent is not listed as a child)
+            all_children = {t[2] for t in tuples}
+            roots = [t for t in tuples if t[3] not in all_children]
+
+            # Sort roots by parse order too
+            roots.sort(key=lambda x: x[-2])
+
+            for root in roots:
+                ordered.append(root)
+                dfs(root[2])
+
+            result[cpu] = ordered
+
+        return result
+
+def build_parameter_table(cpu_config):
+    for _ in cpu_config.items():
         parameter_table = {}
 
         # Flatten all parameters
@@ -78,7 +123,7 @@ def build_parameter_table(parsed_configs):
             
     return parameter_table
 
-def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
+def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_width_bytes=4):
     """
     Assigns memory addresses to modules with 'auto': True using BaseAddress and overlap avoidance.
     Handles symbolic expressions and scans forward from BaseAddress using proper masking.
@@ -95,7 +140,7 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
 
     for cpu_name, cpu_config in parsed_configs.items():
         # Step 1: Build parameter table
-        parameter_table = build_parameter_table(parsed_configs)
+        parameter_table = build_parameter_table(cpu_config)
 
         global_mask = []  # Tracks all used address ranges globally
 
@@ -117,18 +162,28 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                 raise RuntimeError(f"Could not resolve BaseAddress for {section_name}")
 
             # Step 4: Build local address mask for this section
+            def overlaps(new_range, existing_ranges):
+                s, e = new_range
+                return any(not (e < xs or s > xe) for xs, xe in existing_ranges)
             local_mask = []
             for mod_name, mod in section.items():
                 if mod_name == "BaseAddress" or not isinstance(mod, dict):
                     continue
+                if "submodule_of" in mod:
+                    continue
+
                 bounds = mod.get("bounds")
+                enabled = mod.get("flag")
                 if bounds and isinstance(bounds, list) and len(bounds) == 2:
                     try:
                         start = resolve_expression(bounds[0], parameter_table)
                         end = resolve_expression(bounds[1], parameter_table)
                         if start is not None and end is not None:
-                            local_mask.append((start, end))
-                            global_mask.append((start, end)) 
+                            if enabled == "TRUE":
+                                if overlaps((start, end), global_mask):
+                                    print(f"Warning: {mod_name} bounds {start:#04X}-{end:#04X} overlap with existing ranges")
+                                local_mask.append((start, end))
+                                global_mask.append((start, end)) 
                         else:
                             raise RuntimeWarning(f"Skipping unresolved bounds for {mod_name}: {bounds}")
                     except Exception:
@@ -138,6 +193,10 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
             for mod_name, mod in section.items():
                 if mod_name == "BaseAddress" or not isinstance(mod, dict):
                     continue
+
+                if "submodule_of" in mod:
+                    continue
+
                 if mod.get("flag") == "TRUE" and mod.get("auto", False):
                     raw_reg_count = str(mod.pop("registers", None))
                     try:
@@ -166,13 +225,37 @@ def assign_auto_addresses(parsed_configs, alignment=4, reg_width_bytes=4):
                     # Track new range
                     local_mask.append((start_addr, end_addr))
                     global_mask.append((start_addr, end_addr))
-                    section_ptr = end_addr + 1
+                    #section_ptr = end_addr + 1
                     #print(f"[DEBUG] Assigned bounds for '{mod_name}': {mod['bounds']}")
 
             # Step 6: Clean up BaseAddress
             section.pop("BaseAddress", None)
 
-def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_registers.txt", print_to_console=True, save_to_file=False, reg_width_bytes=4, user_modules_only=False):
+    submodule_reg_map = reorder_tree(submodule_reg_map)
+
+    submodule_mask = []
+    current_base_module_start_addr = 0
+    current_base_module_end_addr = 0
+    current_base_module = ""
+    current_base_module_subregister_count = 0
+    for cpu, data in submodule_reg_map.items():
+        for submodule in data:
+            if current_base_module != submodule[0]:
+                current_base_module = submodule[0]
+                submodule_mask = []
+                current_base_module_start_addr = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["bounds"][0])
+                current_base_module_end_addr = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["bounds"][1])
+                current_base_module_subregister_count = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["subregisters"])
+                current_base_module_start_addr += 4*(int((current_base_module_end_addr-current_base_module_start_addr)//alignment + 1) - (current_base_module_subregister_count))
+
+            start_addr = find_free_address(submodule_mask, submodule[4]*alignment, current_base_module_start_addr)
+            end_addr = start_addr + (submodule[4]-1)*alignment
+            submodule_mask.append((start_addr, end_addr))
+            if "subregisters" in parsed_configs[cpu][submodule[1]][submodule[2]]:
+                end_addr += resolve_expression(parsed_configs[cpu][submodule[1]][submodule[2]]["subregisters"])*alignment
+            parsed_configs[cpu][submodule[1]][submodule[2]]["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
+
+def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path, file_name="cpu_registers.txt", print_to_console=True, save_to_file=False, reg_width_bytes=4, user_modules_only=False):
     """
     Resolves symbolic expressions and dumps register addresses with metadata for all CPUs.
     ASCII-only output with clean indentation and structured formatting.
@@ -186,7 +269,7 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
         lines.append(f"Instance: {cpu_name}")
 
         # Build parameter lookup
-        parameter_table = build_parameter_table(parsed_configs)
+        parameter_table = build_parameter_table(cpu_config)
 
         section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -206,12 +289,23 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
                     end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    if "subregisters" in module:
+                        subregisters = resolve_expression(module["subregisters"], parameter_table)
+                    else:
+                        subregisters = 0
                 except Exception as e:
                     lines.append(f"    Error in {module_name}: {e}")
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-
+                if "submodule_of" in module:
+                    for submodule in submodule_reg_map.get(cpu_name):
+                        if submodule[2] == module_name:
+                            submodule_indent = "    " * submodule[2].count(submodule[6])
+                            module_name = str(module_name.split(submodule[6])[-1])
+                            break
+                else:
+                    submodule_indent = ""
                 # Module metadata
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
@@ -219,20 +313,23 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
 
                 lines.append("")
-                lines.append(f"        -> Module: {mod_name_str} ({module_name})")
-                lines.append(f"            - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
-                lines.append(f"            - Register Count: {reg_count}")
+                if submodule_indent:
+                    lines.append(f"{submodule_indent}        -> Submodule: {mod_name_str} ({module_name})")
+                else:
+                    lines.append(f"{submodule_indent}        -> Module: {mod_name_str} ({module_name})")
+                lines.append(f"{submodule_indent}            - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
+                lines.append(f"{submodule_indent}            - Register Count: {reg_count}")
                 if mod_desc_str:
                     indent = " " * 12
                     desc_lines = mod_desc_str.split('\n')
-                    formatted_desc = f"{indent}- Description: {desc_lines[0]}"
+                    formatted_desc = f"{submodule_indent}{indent}- Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
-                        formatted_desc += f"\n{indent}              {line}"
+                        formatted_desc += f"\n{submodule_indent}{indent}              {line}"
                     lines.append(formatted_desc)
 
                 # Register metadata
                 if (mod_reg_expand_str == 'FALSE'):
-                    for i in range(reg_count):
+                    for i in range(reg_count-subregisters):
                         reg_addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
                         reg_info = module.get("regs", {}).get(reg_key, {})
@@ -241,17 +338,17 @@ def dump_all_registers_from_configs(parsed_configs, file_path, file_name="cpu_re
                         reg_perm_str = reg_info.get("permissions", "")
 
                         lines.append("")
-                        lines.append(f"            -> {reg_key}: {reg_name_str}")
-                        lines.append(f"                - Address: 'h{reg_addr:04X}")
+                        lines.append(f"{submodule_indent}            -> {reg_key}: {reg_name_str}")
+                        lines.append(f"{submodule_indent}                - Address: 'h{reg_addr:04X}")
                         if reg_desc_str:
                             indent = " " * 16
                             desc_lines = reg_desc_str.split('\n')
-                            formatted_desc = f"{indent}- Description: {desc_lines[0]}"
+                            formatted_desc = f"{submodule_indent}{indent}- Description: {desc_lines[0]}"
                             for line in desc_lines[1:]:
-                                formatted_desc += f"\n{indent}              {line}"
+                                formatted_desc += f"\n{submodule_indent}{indent}              {line}"
                             lines.append(formatted_desc)
                         if reg_perm_str:
-                            lines.append(f"                - Permissions: {reg_perm_str}")
+                            lines.append(f"{submodule_indent}                - Permissions: {reg_perm_str}")
 
     output = "\n".join(lines)
     if (print_to_console == True):

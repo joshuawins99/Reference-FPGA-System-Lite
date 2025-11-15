@@ -154,6 +154,21 @@ Reg0 :
 @ModuleMetadataEnd*/
 ```
 
+***As of Version 3.14.0*** Submodules are now supported as an entry in the config file. This will in turn calculate the addressing for all submodules as well as produce a hierarchy in the new headers.
+```
+USER_MODULES:
+    timer_e : TRUE : AUTO
+        Module_Include : {REF_PATH}/rtl/timer_cpu.sv
+        SUBMODULE:
+            dac_e : TRUE : AUTO
+                Name : DAC SPI Controller
+                Description : SPI Master for Controlling DAC
+                Module_Include : {REF_PATH}/rtl/spi_master.sv
+            SUBMODULE:
+                timer_e : TRUE : AUTO
+                    Module_Include : {REF_PATH}/rtl/timer_cpu.sv
+```
+
 Run the python script to generate the module and package file:
 ```bash
 python3 generate_cpu_instance.py

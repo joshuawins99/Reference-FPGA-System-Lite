@@ -1,5 +1,6 @@
 import os
 import re
+from registers import reorder_tree, resolve_expression, build_parameter_table
 
 def get_c_code_folders(parsed_configs):
     """Extracts C_CODE_FOLDER values from the parsed configs if present."""
@@ -49,12 +50,14 @@ def check_config_files(directory, config_file_names):
         for folder in folders
     }
 
-def scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description):
+def scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description, indent_amount=0):
     current_path = os.path.join(os.path.dirname(file_path), parse_file_path(include_file, config_data))
     inside_metadata = False
     metadata_block = []
     inside_register = False
     filtered_block = []
+
+    spaces = " " * indent_amount
 
     with open(current_path, "r") as file:
         for line in file:
@@ -65,7 +68,7 @@ def scrape_metadata(config_data, file_path, include_file, config_file_lines, cur
                 inside_metadata = False
                 break
             if inside_metadata:
-                metadata_block.append(line)
+                metadata_block.append(spaces + line)
 
     for line in metadata_block:
         if re.match(r"(Reg\d+)\s*:", line):
@@ -80,10 +83,43 @@ def scrape_metadata(config_data, file_path, include_file, config_file_lines, cur
     for i in range(len(filtered_block)):
         config_file_lines.insert(current_line_index+i, filtered_block[i])
 
+def get_base_module(config_data):
+    is_submodule = []
+    for section in ["BUILTIN_MODULES","USER_MODULES"]:
+        for module_name, module in config_data.get(section, {}).items():
+            submodule_data = module.get('submodule_of', '')
+            if submodule_data:
+                is_submodule.append((module_name, True))
+            else:
+                is_submodule.append((module_name, False))
+
+    if not is_submodule:
+        return None
+    
+    if is_submodule[-1][1] is not True:
+        result = is_submodule[-1][0]
+    else:
+        for pair in reversed(is_submodule):
+            if pair[1] is not True:
+                result = pair[0]
+                break
+    return result
+
+def get_indent_level(raw_line):
+    return len(raw_line) - len(raw_line.lstrip(" "))
+
+def normalize_indent(line, indent_size=4):
+    line = line.expandtabs(indent_size)  # Convert tabs to spaces
+    stripped = line.lstrip()
+    leading_spaces = len(line) - len(stripped)
+    indent_level = leading_spaces // indent_size
+    return " " * (indent_level * indent_size) + stripped
+
 def parse_config(file_path):
     """Parses the cpu_config.txt file and returns a structured dictionary, including metadata and multiline support."""
     config_data = {}
     current_section = None
+    current_base_section = None
     current_module = None
     current_register = None
     current_field = None
@@ -93,6 +129,14 @@ def parse_config(file_path):
     got_register_name = False
     got_register_description = False
     infer_module_registers = {}
+    got_submodule = False
+    current_base_module = None
+    current_submodule_indent = 0
+    submodule_indexes = []
+    submodule_name_append = None
+
+    indent_size = 4
+    submodule_identifier = "____"
 
     # Pattern matching compile
     section_re = re.compile(r"^(\w+):\s*(.*)?$")
@@ -109,8 +153,11 @@ def parse_config(file_path):
     permissions_re = re.compile(r"Permissions\s*:\s*(.+)")
     module_include_re = re.compile(r"Module_Include\s*:\s*(.+)")
 
+    # with open(file_path, "r") as file:
+    #     config_file_lines = file.readlines()
+
     with open(file_path, "r") as file:
-        config_file_lines = file.readlines()
+        config_file_lines = [normalize_indent(line, indent_size) for line in file]
 
     for raw_line in config_file_lines:
         current_line_index = current_line_index + 1
@@ -154,7 +201,43 @@ def parse_config(file_path):
         module_include_match = module_include_re.match(line)
 
         if section_match:
-            current_section = section_match.group(1)
+            if (section_match.group(1) == "SUBMODULE"):
+                current_base_section = current_section
+                if current_module:
+                    if not submodule_indexes:
+                        submodule_indexes.append((current_module, get_indent_level(raw_line)-indent_size))
+                    next_line = config_file_lines[current_line_index]
+                    next_line = next_line.strip()
+                    sub_module_match = module_re.match(next_line) or auto_expr_re.match(next_line) or auto_literal_re.match(next_line) or auto_simple_re.match(next_line)
+                    if not sub_module_match.group(1):
+                        raise SyntaxError(f"'{next_line}' is not valid")
+                    submodule_indexes.append((sub_module_match.group(1), get_indent_level(raw_line)))
+                    if submodule_indexes[-1][1] - submodule_indexes[-2][1] > indent_size:
+                        raise SyntaxError(f"'{next_line}' indention is not valid. Did you skip a level?")
+                    current_section = current_base_section
+                    got_submodule = True
+                    current_submodule_indent = get_indent_level(raw_line)
+                    qualified_chain = []
+                    target_indent = current_submodule_indent
+                    for name, indent in reversed(submodule_indexes):
+                        if indent == target_indent:
+                            qualified_chain.insert(0, name)
+                            target_indent -= indent_size
+                        elif indent < target_indent:
+                            # Stop once we've walked up the hierarchy
+                            break
+                    submodule_name_append = submodule_identifier.join(qualified_chain)
+                    # Walk backward through submodule_indexes to find the first module with indent 4 less
+                    for prev_name, prev_indent in reversed(submodule_indexes[:-1]):
+                        if prev_indent == current_submodule_indent - indent_size:
+                            current_base_module = prev_name
+                            break
+                    else:
+                        raise SyntaxError(f"Indentation incorrect within module '{submodule_indexes[:-1][0][0]}'")
+                else:
+                    raise SyntaxError(f"'{line}' is not valid")
+            else:
+                current_section = section_match.group(1)
             config_data.setdefault(current_section, {})
             current_module = None
             current_register = None
@@ -175,21 +258,37 @@ def parse_config(file_path):
                 config_data[current_section][key]["bit_width"] = bit_width
 
         elif auto_expr_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-            key = auto_expr_match.group(1)
+            if submodule_name_append:
+                key = submodule_name_append
+                submodule_name_append = None
+            else:
+                key = auto_expr_match.group(1)
             flag = auto_expr_match.group(2)
             reg_count = auto_expr_match.group(3)
             expand_regs = auto_expr_match.group(4)
             got_register_name = False
             got_register_description = False
             
-            config_data[current_section][key] = {
-                "flag": flag,
-                "auto": True,
-                "registers": reg_count,
-                "metadata": {},
-                "regs": {},
-                "include_file" : {}
-            }
+            if got_submodule:
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {},
+                    "submodule_of" : current_base_module
+                }
+            else:
+                submodule_indexes = []
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {}
+                }
 
             if (expand_regs == "NOEXPREGS"):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
@@ -198,23 +297,41 @@ def parse_config(file_path):
             current_module = key
             current_register = None
             current_field = None
+            got_submodule = False
+            current_base_module = None
 
         elif auto_literal_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-            key = auto_literal_match.group(1)
+            if submodule_name_append:
+                key = submodule_name_append
+                submodule_name_append = None
+            else:
+                key = auto_literal_match.group(1)
             flag = auto_literal_match.group(2)
             reg_count = int(auto_literal_match.group(3))
             expand_regs = auto_literal_match.group(4)
             got_register_name = False
             got_register_description = False
 
-            config_data[current_section][key] = {
-                "flag": flag,
-                "auto": True,
-                "registers": reg_count,
-                "metadata": {},
-                "regs": {},
-                "include_file" : {}
-            }
+            if got_submodule:
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {},
+                    "submodule_of" : current_base_module
+                }
+            else:
+                submodule_indexes = []
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": reg_count,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {}
+                } 
             
             if (expand_regs == "NOEXPREGS"):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
@@ -223,22 +340,40 @@ def parse_config(file_path):
             current_module = key
             current_register = None
             current_field = None
+            got_submodule = False
+            current_base_module = None
 
         elif auto_simple_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-            key = auto_simple_match.group(1)
+            if submodule_name_append:
+                key = submodule_name_append
+                submodule_name_append = None
+            else:
+                key = auto_simple_match.group(1)
             flag = auto_simple_match.group(2)
             expand_regs = auto_simple_match.group(3)
             got_register_name = False
             got_register_description = False
 
-            config_data[current_section][key] = {
-                "flag": flag,
-                "auto": True,
-                "registers": None,  #Will be inferred later
-                "metadata": {},
-                "regs": {},
-                "include_file": {}
-            }
+            if got_submodule:
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": None,  #Will be inferred later
+                    "metadata": {},
+                    "regs": {},
+                    "include_file": {},
+                    "submodule_of" : current_base_module
+                }
+            else:
+                submodule_indexes = []
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "auto": True,
+                    "registers": None,  #Will be inferred later
+                    "metadata": {},
+                    "regs": {},
+                    "include_file": {}
+                }
 
             if expand_regs == "NOEXPREGS":
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
@@ -248,22 +383,39 @@ def parse_config(file_path):
             current_register = None
             current_field = None
             infer_module_registers[current_module] = 0
+            got_submodule = False
+            current_base_module = None
 
         elif module_match and current_section in ["BUILTIN_MODULES", "USER_MODULES"]:
-            key = module_match.group(1)
+            if submodule_name_append:
+                key = submodule_name_append
+                submodule_name_append = None
+            else:
+                key = module_match.group(1)
             flag = module_match.group(2)
             bounds = [b.strip().rstrip(",") for b in module_match.group(3).split(",")]
             expand_regs = module_match.group(4)
             got_register_name = False
             got_register_description = False
 
-            config_data[current_section][key] = {
-                "flag": flag,
-                "bounds": bounds,
-                "metadata": {},
-                "regs": {},
-                "include_file" : {}
-            }
+            if got_submodule:
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "bounds": bounds,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {},
+                    "submodule_of" : current_base_module
+                }
+            else:
+                submodule_indexes = []
+                config_data[current_section][key] = {
+                    "flag": flag,
+                    "bounds": bounds,
+                    "metadata": {},
+                    "regs": {},
+                    "include_file" : {}
+                }
 
             if (expand_regs == "NOEXPREGS"):
                 config_data[current_section][key]["metadata"]["expand_regs"] = 'TRUE'
@@ -272,6 +424,8 @@ def parse_config(file_path):
             current_module = key
             current_register = None
             current_field = None
+            got_submodule = False
+            current_base_module = None
 
         elif current_module and module_include_match:
             if (current_register == None):
@@ -279,7 +433,7 @@ def parse_config(file_path):
                 existing_metadata = config_data[current_section][current_module]["metadata"]
                 has_name = "name" in existing_metadata
                 has_description = "description" in existing_metadata
-                scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description)
+                scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description, get_indent_level(raw_line))
             else:
                 raise SyntaxError(f"Registers Defined and Module Include Specified in Entry: '{current_module}'")
             
@@ -353,11 +507,75 @@ def parse_config(file_path):
         if count > 0:
             config_data[current_section][mod]["registers"] = count
 
-    return config_data
+    #Build a map of submodules to add to base module recursively
+    submodule_reg_add_map = []
+    id_count = 0
+    for section, data in config_data.items():
+            if section == "BUILTIN_MODULES" or section == "USER_MODULES":
+                for module, module_data in data.items():
+                    submodule_data = module_data.get('submodule_of', '')
+                    registers_to_add = module_data.get('registers', '')
+                    if submodule_data:
+                        submodule_data = module.split(submodule_identifier)
+                        #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
+                        submodule_reg_add_map.append((submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier))
+                        id_count +=1
+
+    submodule_reg_add_map_sorted_key = {}
+    submodule_reg_add_map_sorted_key["key"] = submodule_reg_add_map
+    submodule_reg_add_map_sorted = reorder_tree(submodule_reg_add_map_sorted_key)["key"]
+   
+    # Build parent -> children map and native counts
+    native_counts = {}
+    children_map = {}
+
+    for _, section, full, parent, count, _, _ in submodule_reg_add_map_sorted:
+        # record native count for this module (from tuples)
+        native_counts[full] = count
+
+        # build children map
+        children_map.setdefault(parent, []).append(full)
+
+        # ensure dict entries exist
+        config_data.setdefault(section, {}).setdefault(full, {"registers": "0", "subregisters": "0"})
+        config_data.setdefault(section, {}).setdefault(parent, {"registers": "0", "subregisters": "0"})
+
+    # IMPORTANT: use the base's already-initialized registers as its native count
+    # registers is a string; convert to int
+    parameters_list = build_parameter_table(config_data)
+
+    for base, section, _, _, _, _, _ in submodule_reg_add_map_sorted:
+        if base not in native_counts:
+            base_initial = int(resolve_expression(config_data[section].get(base, {}).get("registers", "0"), parameters_list))
+            native_counts[base] = base_initial
+
+    # Recursive total calculator (native + descendants)
+    def compute_total(module):
+        total = native_counts.get(module, 0)
+        for child in children_map.get(module, []):
+            total += compute_total(child)
+        return total
+
+    # Fill registers and subregisters for all modules in the tree
+    for base, section, full, _, _, _, _ in submodule_reg_add_map_sorted:
+        total = compute_total(full)
+        native = native_counts.get(full, 0)
+        config_data[section][full]["registers"] = str(total)          # native + children
+        config_data[section][full]["subregisters"] = str(total - native)  # children only
+
+    # Ensure base (level 0) modules also get updated correctly
+    for base, section, _, _, _, _, _ in submodule_reg_add_map_sorted:
+        total = compute_total(base)
+        native = native_counts.get(base, 0)
+        config_data[section][base]["registers"] = str(total)
+        config_data[section][base]["subregisters"] = str(total - native)
+
+    return config_data, submodule_reg_add_map_sorted
 
 def process_configs(directory_path, config_file_names):
     """Processes config files in multiple folders and returns parsed data."""
     parsed_configs = {}
+    submodule_reg_map = {}
 
     for folder in os.listdir(directory_path):
         folder_path = os.path.join(directory_path, folder)
@@ -370,6 +588,6 @@ def process_configs(directory_path, config_file_names):
                 config_path = potential_path
                 break  # Found a valid config file; no need to keep checking
         if config_path:
-            parsed_configs[folder] = parse_config(config_path)
+            parsed_configs[folder], submodule_reg_map[folder] = parse_config(config_path)
 
-    return parsed_configs
+    return parsed_configs, submodule_reg_map

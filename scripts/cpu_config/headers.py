@@ -1,16 +1,8 @@
 import os
 import re
-from registers import resolve_expression, build_parameter_table
-class CompactRegisterBlock:
-    def __init__(self, base, count, address_wording):
-        self.base = base
-        self.count = count
-        self.address_wording = address_wording
+from registers import resolve_expression, build_parameter_table, reorder_tree
 
-    def reg_at(self, index):
-        return self.base + index * self.address_wording
-
-def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False):
+def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False):
 
     def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
@@ -18,12 +10,14 @@ def export_per_cpu_headers(parsed_configs, directory_path, reg_width_bytes=4, us
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
         os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
+        current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
 
         c_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.h")
         py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
 
         c_lines = []
         py_lines = []
+        module_storage = []
 
         # C Header Boilerplate
         c_lines.append("// Auto-generated register map header")
@@ -272,20 +266,24 @@ class FPGAInterface:
         cmd = f"wFPGA,{int(address)},{int(value)}\\n"
         self.transport.write(cmd)
                             """)
+            
+        temp_module_storage = []
 
         # Parameter Table
-        parameter_table = build_parameter_table(parsed_configs)
+        parameter_table = build_parameter_table(cpu_config)
 
         # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
         for section in module_sections:
             for module_name, module in cpu_config.get(section, {}).items():
+                temp_module_storage = []
                 if module_name == "BaseAddress" or not isinstance(module, dict):
                     continue
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
-
+                if  any(x[2] == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
+                    continue
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
                     end_addr = resolve_expression(module["bounds"][1], parameter_table)
@@ -307,13 +305,13 @@ class FPGAInterface:
                     for line in desc_lines[1:]:
                         formatted_desc += f"\n//                    {line}"
                     c_lines.append(formatted_desc)
-                py_lines.append(f"# Module: {mod_name_str} ({module_name})")
+                temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"# Module Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
                         formatted_desc += f"\n#                    {line}"
-                    py_lines.append(formatted_desc)
+                    temp_module_storage.append(formatted_desc)
 
                 enum_name = f"{module_id}_REG"
 
@@ -384,8 +382,32 @@ class FPGAInterface:
                 if not new_python_header:
                     py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
                 else:
+                    #Submodule specific Logic
+                    subblock_name = None
+                    hidden_entry_prefix = ""
+                    if any(x[2] == module_name for x in current_submodule_map) and module.get("submodule_of", "") or any(x[0] == module_name for x in current_submodule_map):
+                        current_module = ""
+                        subblock_placed = False
+                        for idx, entry in enumerate(current_submodule_map):
+                            if entry[3] == module_name:
+                                sub_module = str(entry[2].split(entry[6])[-1])
+                                get_current_addr = module.get("bounds")
+                                get_sub_addr = cpu_config[entry[1]][entry[2]]["bounds"]
+                                offset_from_base = resolve_expression(get_sub_addr[0], parameter_table)-resolve_expression(get_current_addr[0], parameter_table)
+                                if current_module != module_id:
+                                    current_module = module_id
+                                    temp_module_storage.append(f"_{module_id}_subblocks = [")
+                                    subblock_placed = True
+                                temp_module_storage.append(f"    ('{sub_module}', {offset_from_base}, _{entry[2]}),")
+                            if idx == len(current_submodule_map)-1 and subblock_placed:
+                                temp_module_storage.append(f"]")
+                        if subblock_placed == True:
+                            subblock_name = f"_{module_id}_subblocks"
+                    if any(x[2] == module_name for x in current_submodule_map):
+                        hidden_entry_prefix = "_"
+                    #Normal Module Logic
+                    register_defs = []
                     if (mod_reg_expand_str == 'FALSE'):
-                        register_defs = []
                         field_defs = []
                         for i in range(reg_count):
                             reg_key = f"Reg{i}"
@@ -415,7 +437,7 @@ class FPGAInterface:
                                 reg_perm = "R/W"
                             register_defs.append((reg_name_id.lower(), reg_perm, reg_desc))
                         if not(all(i[0] == '' for i in register_defs)): #Check to see if register name field is empty. If so, dont add register_defs
-                            py_lines.append(f"{module_id}_reg_defs = [")
+                            temp_module_storage.append(f"_{module_id}_reg_defs = [")
                             for idx, (name, perm, desc) in enumerate(register_defs):
                                 fields = field_defs[idx]
                                 if not (len(fields) == 1 and all(v is None for v in fields[0])):
@@ -427,26 +449,22 @@ class FPGAInterface:
                                 else:
                                     line = f"({repr(name)}, {repr(perm)}, {repr(desc)})"
                                 if idx < len(register_defs)-1:
-                                    py_lines.append(line + ",")
+                                    temp_module_storage.append(line + ",")
                                 else:
-                                    py_lines.append(line)
-                                    py_lines.append(f"]")
-                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, {module_id}_reg_defs)\n")
-                        else:
-                            if mod_name_str or mod_desc_str:
-                                py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)})\n")
-                            else:
-                                py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+                                    temp_module_storage.append(line)
+                                    temp_module_storage.append(f"]")
+                    if register_defs:
+                        temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, _{module_id}_reg_defs, {subblock_name})\n")
                     else:
-                        if mod_name_str or mod_desc_str:
-                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)})\n")
-                        else:
-                            py_lines.append(f"{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
+                        temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, None, {subblock_name})\n")
+                    module_storage[0:0] = temp_module_storage
 
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
         print(f"C header for {cpu_name} saved to: {c_filename}")
 
+        for entry in module_storage:
+            py_lines.append(entry)
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
         print(f"Python header for {cpu_name} saved to: {py_filename}\n")

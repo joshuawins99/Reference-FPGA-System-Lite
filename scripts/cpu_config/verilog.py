@@ -1,7 +1,7 @@
 import os
 import re
 
-def generate_systemverilog(config):
+def generate_systemverilog(config, submodule_reg_map):
     """Generates a complete SystemVerilog package including parameters, modules, addresses, and functions."""
     module_entries = []
     address_entries = []
@@ -20,7 +20,13 @@ def generate_systemverilog(config):
     module_list = [
         module
         for module, data in all_modules.items()
-        if isinstance(data, dict) and data.get("flag") == "TRUE"
+        if isinstance(data, dict) and data.get("flag") == "TRUE" and not "submodule_of" in data
+    ]
+    
+    submodule_list = [
+        module
+        for module, data in all_modules.items()
+        if isinstance(data, dict) and data.get("flag") == "TRUE" and "submodule_of" in data
     ]
 
     # Generate module bus enumeration with an extra comma before num_entries
@@ -175,7 +181,7 @@ endpackage
 
     return systemverilog_code.strip()
 
-def save_systemverilog_files(parsed_configs, base_directory):
+def save_systemverilog_files(parsed_configs, submodule_reg_map, base_directory):
     """Loops through parsed configs and saves corresponding SystemVerilog files."""
     for package_base_name, config in parsed_configs.items():
         package_name = f"{package_base_name}_package"  # Append _package to the name
@@ -183,7 +189,7 @@ def save_systemverilog_files(parsed_configs, base_directory):
         if not config:  # Skip empty configs
             raise RuntimeWarning(f"No data found for {package_base_name}. Skipping.")
 
-        systemverilog_output = generate_systemverilog({package_base_name: config})
+        systemverilog_output = generate_systemverilog({package_base_name: config}, submodule_reg_map[package_base_name])
 
         # Define the output file path inside the respective package directory
         folder_path = os.path.join(base_directory, package_base_name)  # Folder remains original

@@ -35,26 +35,26 @@ if not any(config_files.values()):
 filtered_dirs = [dir_name for dir_name in config_files if config_files.get(dir_name)]
 #print(filtered_dirs)
 
-parsed_configs = process_configs(absolute_path, config_file_names)
+parsed_configs, submodule_reg_map = process_configs(absolute_path, config_file_names)
 #print(parsed_configs)
-assign_auto_addresses(parsed_configs)
+assign_auto_addresses(parsed_configs, submodule_reg_map)
 #print(parsed_configs)
 
 if "--print-all-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=False)
+        dump_all_registers_from_configs(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False)
 
 if "--save-all-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=False, save_to_file=True,print_to_console=False)
+        dump_all_registers_from_configs(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, save_to_file=True,print_to_console=False)
 
 if "--print-user-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs,absolute_path, user_modules_only=True)
+        dump_all_registers_from_configs(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=True)
 
 if "--save-user-registers" in sys.argv:
     if (filtered_dirs):
-        dump_all_registers_from_configs(parsed_configs, absolute_path, user_modules_only=True, save_to_file=True, print_to_console=True)
+        dump_all_registers_from_configs(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=True, save_to_file=True, print_to_console=True)
 
 if "--gen-headers" in sys.argv:
     new_python_header = False
@@ -74,7 +74,7 @@ if "--gen-headers" in sys.argv:
         new_c_header = True
 
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header)
+        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header)
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)
@@ -107,7 +107,7 @@ if "--build" in sys.argv:
                         if (build_folder != default_c_code_path): 
                             if os.path.exists(f"{build_folder}/{cpu_name}_registers.h"):
                                 os.remove(f"{build_folder}/{cpu_name}_registers.h")
-                            print(f"Moved generated header: {build_folder}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
+                            print(f"Moved generated header: {absolute_path}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
                             shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
                     result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
                     print(result.stdout + result.stderr)
@@ -115,7 +115,7 @@ if "--build" in sys.argv:
                     raise FileNotFoundError (f"Build folder not found for {cpu_name}: {build_folder}")
 
                 curr_config_dict = {cpu_name: parsed_configs.get(cpu_name)}
-                save_systemverilog_files(curr_config_dict, absolute_path)
+                save_systemverilog_files(curr_config_dict, submodule_reg_map, absolute_path)
                 update_cpu_modules_file(curr_config_dict, absolute_path, reference_file=f"{parent_directory}/{reference_system_file}")
                 subprocess.run(["bash", "-c", "git clean -fdx"], cwd=parent_directory, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
@@ -124,7 +124,7 @@ if "--build" in sys.argv:
 else:
     if os.path.exists(f"{go_up_n_levels(current_directory,1)}/{reference_system_file}"):
         if (filtered_dirs):
-            save_systemverilog_files(parsed_configs, absolute_path)
+            save_systemverilog_files(parsed_configs, submodule_reg_map, absolute_path)
             update_cpu_modules_file(parsed_configs, absolute_path, reference_file=reference_system_file)
     else:
         raise FileNotFoundError(f"{go_up_n_levels(current_directory,1)}/{reference_system_file} not found. Are you using a release build?")
