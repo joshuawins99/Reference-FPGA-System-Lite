@@ -216,17 +216,32 @@ class CompactRegisterBlock:
         if self.name:
             print(f"{pad}Module Name: {self.name}")
         if self.desc:
-            print(f"{pad}Module Description: {self.desc}")
+            desc_lines = self.desc.splitlines()
+            for i, line in enumerate(desc_lines):
+                if i == 0:
+                    print(f"{pad}Module Description: {line}")
+                else:
+                    print(f"{pad}                   {line}")
         print(f"{pad}Register Block @ 0x{self.base:04X} ({self.count} registers):")
         for name, reg in self._registers.items():
             if reg.description:
-                print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}] - {reg.description}")
+                desc_lines = reg.description.splitlines()
+                for i, line in enumerate(desc_lines):
+                    if i == 0:
+                        print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}] - {line}")
+                    else:
+                        print(f"{pad}                                  {line}")
             else:
                 print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}]")
             if reg.bitfield:
                 for field_name, (pos, length, desc) in reg.bitfield.fields.items():
                     if desc:
-                        print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}] - {desc}")
+                        desc_lines = desc.splitlines()
+                        for i, line in enumerate(desc_lines):
+                            if i == 0:
+                                print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}] - {line}")
+                            else:
+                                print(f"{pad}                                         {line}")
                     else:
                         print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}]")
         for name, block in self._sub_blocks.items():

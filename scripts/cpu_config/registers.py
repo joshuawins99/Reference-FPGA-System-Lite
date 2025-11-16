@@ -355,10 +355,10 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                             fname = field_info.get("name", field_key)
                             fbounds = field_info.get("bounds", [])
                             fdesc = field_info.get("description", "")
-                            desc_lines = fdesc.split('\n')
                             lines.append(f"{submodule_indent}                -> {field_key}: {fname}")
                             lines.append(f"{submodule_indent}                    - Bits: [{fbounds[0]}:{fbounds[1]}]")
                             if fdesc:
+                                desc_lines = fdesc.split('\n')
                                 formatted_desc = f"{submodule_indent}                    - Description: {desc_lines[0]}"
                                 for line in desc_lines[1:]:
                                     formatted_desc += f"\n{submodule_indent}                                  {line}"
