@@ -350,6 +350,20 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                         if reg_perm_str:
                             lines.append(f"{submodule_indent}                - Permissions: {reg_perm_str}")
 
+                        fields = reg_info.get("fields", {})
+                        for field_key, field_info in fields.items():
+                            fname = field_info.get("name", field_key)
+                            fbounds = field_info.get("bounds", [])
+                            fdesc = field_info.get("description", "")
+                            desc_lines = fdesc.split('\n')
+                            lines.append(f"{submodule_indent}                -> {field_key}: {fname}")
+                            lines.append(f"{submodule_indent}                    - Bits: [{fbounds[0]}:{fbounds[1]}]")
+                            if fdesc:
+                                formatted_desc = f"{submodule_indent}                    - Description: {desc_lines[0]}"
+                                for line in desc_lines[1:]:
+                                    formatted_desc += f"\n{submodule_indent}                                  {line}"
+                                lines.append(formatted_desc)
+
     output = "\n".join(lines)
     if (print_to_console == True):
         print(output)

@@ -50,8 +50,23 @@ def check_config_files(directory, config_file_names):
         for folder in folders
     }
 
-def scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description, indent_amount=0):
-    current_path = os.path.join(os.path.dirname(file_path), parse_file_path(include_file, config_data))
+def scrape_metadata(config_data, file_path, include_file_dirs, include_file, config_file_lines, current_line_index, has_name, has_description, indent_amount=0):
+    
+    include_path = parse_file_path(include_file, config_data)
+    current_path = None
+    base_dir = os.path.dirname(os.path.abspath(file_path))
+
+    for dir_path in include_file_dirs:
+        # Each candidate should be resolved relative to the current file’s directory
+        candidate = os.path.normpath(os.path.join(base_dir, dir_path, include_path))
+        if os.path.exists(candidate):
+            current_path = candidate
+            break
+
+    # Fallback if nothing matched
+    if current_path is None:
+        current_path = os.path.normpath(os.path.join(base_dir, include_path))
+
     inside_metadata = False
     metadata_block = []
     inside_register = False
@@ -134,6 +149,7 @@ def parse_config(file_path):
     current_submodule_indent = 0
     submodule_indexes = []
     submodule_name_append = None
+    include_file_dirs = []
 
     indent_size = 4
     submodule_identifier = "____"
@@ -179,6 +195,8 @@ def parse_config(file_path):
                         got_register_description = True
                     if pending_key == "name":
                         got_register_name = True
+                elif current_field:
+                    config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["description"] = pending_value.strip()
                 else:
                     config_data[current_section][current_module]["metadata"][pending_key] = pending_value.strip()
                 pending_key = None
@@ -430,10 +448,13 @@ def parse_config(file_path):
         elif current_module and module_include_match:
             if (current_register == None):
                 include_file = module_include_match.group(1)
+                absolute_path = os.path.dirname(parse_file_path(include_file, config_data))
+                if absolute_path not in include_file_dirs:
+                    include_file_dirs.append(absolute_path)
                 existing_metadata = config_data[current_section][current_module]["metadata"]
                 has_name = "name" in existing_metadata
                 has_description = "description" in existing_metadata
-                scrape_metadata(config_data, file_path, include_file, config_file_lines, current_line_index, has_name, has_description, get_indent_level(raw_line))
+                scrape_metadata(config_data, file_path, include_file_dirs, include_file, config_file_lines, current_line_index, has_name, has_description, get_indent_level(raw_line))
             else:
                 raise SyntaxError(f"Registers Defined and Module Include Specified in Entry: '{current_module}'")
             
@@ -506,6 +527,10 @@ def parse_config(file_path):
     for mod, count in infer_module_registers.items():
         if count > 0:
             config_data[current_section][mod]["registers"] = count
+        else:
+            #Didn't find any Regx entries. Maybe there are submodules?
+            #Should error in the auto allocator if there aren't
+            config_data[current_section][mod]["registers"] = 0
 
     #Build a map of submodules to add to base module recursively
     submodule_reg_add_map = []
