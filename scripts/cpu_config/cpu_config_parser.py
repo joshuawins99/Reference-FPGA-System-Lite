@@ -150,8 +150,11 @@ def parse_config(file_path):
     submodule_indexes = []
     submodule_name_append = None
     include_file_dirs = []
+    got_module_name = False
+    got_module_description = False
 
     indent_size = 4
+    submodule_indent_size = indent_size * 2
     submodule_identifier = "____"
 
     # Pattern matching compile
@@ -199,6 +202,7 @@ def parse_config(file_path):
                     config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["description"] = pending_value.strip()
                 else:
                     config_data[current_section][current_module]["metadata"][pending_key] = pending_value.strip()
+                    got_module_description = True
                 pending_key = None
                 pending_value = ""
                 continue
@@ -223,14 +227,14 @@ def parse_config(file_path):
                 current_base_section = current_section
                 if current_module:
                     if not submodule_indexes:
-                        submodule_indexes.append((current_module, get_indent_level(raw_line)-indent_size))
+                        submodule_indexes.append((current_module, get_indent_level(raw_line)-submodule_indent_size))
                     next_line = config_file_lines[current_line_index]
                     next_line = next_line.strip()
                     sub_module_match = module_re.match(next_line) or auto_expr_re.match(next_line) or auto_literal_re.match(next_line) or auto_simple_re.match(next_line)
                     if not sub_module_match.group(1):
                         raise SyntaxError(f"'{next_line}' is not valid")
                     submodule_indexes.append((sub_module_match.group(1), get_indent_level(raw_line)))
-                    if submodule_indexes[-1][1] - submodule_indexes[-2][1] > indent_size:
+                    if submodule_indexes[-1][1] - submodule_indexes[-2][1] > submodule_indent_size:
                         raise SyntaxError(f"'{next_line}' indention is not valid. Did you skip a level?")
                     current_section = current_base_section
                     got_submodule = True
@@ -240,14 +244,14 @@ def parse_config(file_path):
                     for name, indent in reversed(submodule_indexes):
                         if indent == target_indent:
                             qualified_chain.insert(0, name)
-                            target_indent -= indent_size
+                            target_indent -= submodule_indent_size
                         elif indent < target_indent:
                             # Stop once we've walked up the hierarchy
                             break
                     submodule_name_append = submodule_identifier.join(qualified_chain)
                     # Walk backward through submodule_indexes to find the first module with indent 4 less
                     for prev_name, prev_indent in reversed(submodule_indexes[:-1]):
-                        if prev_indent == current_submodule_indent - indent_size:
+                        if prev_indent == current_submodule_indent - submodule_indent_size:
                             current_base_module = prev_name
                             break
                     else:
@@ -286,6 +290,8 @@ def parse_config(file_path):
             expand_regs = auto_expr_match.group(4)
             got_register_name = False
             got_register_description = False
+            got_module_name = False
+            got_module_description = False
             
             if got_submodule:
                 config_data[current_section][key] = {
@@ -329,6 +335,8 @@ def parse_config(file_path):
             expand_regs = auto_literal_match.group(4)
             got_register_name = False
             got_register_description = False
+            got_module_name = False
+            got_module_description = False
 
             if got_submodule:
                 config_data[current_section][key] = {
@@ -371,6 +379,8 @@ def parse_config(file_path):
             expand_regs = auto_simple_match.group(3)
             got_register_name = False
             got_register_description = False
+            got_module_name = False
+            got_module_description = False
 
             if got_submodule:
                 config_data[current_section][key] = {
@@ -415,6 +425,8 @@ def parse_config(file_path):
             expand_regs = module_match.group(4)
             got_register_name = False
             got_register_description = False
+            got_module_name = False
+            got_module_description = False
 
             if got_submodule:
                 config_data[current_section][key] = {
@@ -490,7 +502,9 @@ def parse_config(file_path):
             elif current_field:
                 config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["name"] = name_val
             else:
-                config_data[current_section][current_module]["metadata"]["name"] = name_val
+                if got_module_name == False:
+                    got_module_name = True
+                    config_data[current_section][current_module]["metadata"]["name"] = name_val
 
         elif current_module and desc_match:
             desc_val = desc_match.group(1)
@@ -504,7 +518,9 @@ def parse_config(file_path):
                 elif current_field:
                     config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["description"] = desc_val.strip()
                 else:
-                    config_data[current_section][current_module]["metadata"]["description"] = desc_val.strip()
+                    if got_module_description == False:
+                        got_module_description = True
+                        config_data[current_section][current_module]["metadata"]["description"] = desc_val.strip()
 
         elif current_module and permissions_match:
             perm_val = permissions_match.group(1).strip().lower()

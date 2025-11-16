@@ -164,9 +164,9 @@ USER_MODULES:
                 Name : DAC SPI Controller
                 Description : SPI Master for Controlling DAC
                 Module_Include : {REF_PATH}/rtl/spi_master.sv
-            SUBMODULE:
-                timer_e : TRUE : AUTO
-                    Module_Include : {REF_PATH}/rtl/timer_cpu.sv
+                SUBMODULE:
+                    timer_e : TRUE : AUTO
+                        Module_Include : {REF_PATH}/rtl/timer_cpu.sv
 ```
 
 Run the python script to generate the module and package file:
