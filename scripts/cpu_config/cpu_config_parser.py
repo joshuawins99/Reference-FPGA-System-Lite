@@ -549,13 +549,17 @@ def parse_config(file_path):
             config_data[current_section][mod]["registers"] = 0
 
     #Build a map of submodules to add to base module recursively
+    parameters_list = build_parameter_table(config_data)
     submodule_reg_add_map = []
     id_count = 0
     for section, data in config_data.items():
             if section == "BUILTIN_MODULES" or section == "USER_MODULES":
                 for module, module_data in data.items():
                     submodule_data = module_data.get('submodule_of', '')
-                    registers_to_add = module_data.get('registers', '')
+                    try:
+                        registers_to_add = int(resolve_expression(module_data.get('registers', '0'), parameters_list))
+                    except:
+                        raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
                     if submodule_data:
                         submodule_data = module.split(submodule_identifier)
                         #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
@@ -583,7 +587,6 @@ def parse_config(file_path):
 
     # IMPORTANT: use the base's already-initialized registers as its native count
     # registers is a string; convert to int
-    parameters_list = build_parameter_table(config_data)
 
     for base, section, _, _, _, _, _ in submodule_reg_add_map_sorted:
         if base not in native_counts:

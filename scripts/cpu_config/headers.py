@@ -31,8 +31,10 @@ def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, re
         if new_c_header:
             c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))")
             c_lines.append("#define REG_NAME(mod, reg) mod##_##reg")
-            c_lines.append("#define WRITE(mod, reg, val) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
-            c_lines.append("#define READ(mod, reg) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)))\n")
+            c_lines.append("#define WRITE32(mod, reg, val) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
+            c_lines.append("#define READ32(mod, reg) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)))")
+            c_lines.append("#define WRITE8(mod, reg, val) (*(volatile unsigned char*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
+            c_lines.append("#define READ8(mod, reg) (*(volatile unsigned char*)REG_AT(mod, REG_NAME(mod, reg)))\n")
         else:
             c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
 
@@ -306,6 +308,7 @@ class FPGAInterface:
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
+                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
                 module_id = module_name.upper()
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
@@ -342,7 +345,7 @@ class FPGAInterface:
                 if (mod_reg_expand_str == 'FALSE'):
                     if new_c_header:
                         c_addr_macros.append(f"enum {{")
-                    for i in range(reg_count):
+                    for i in range(reg_count-subregisters):
                         addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
                         reg_info = module.get("regs", {}).get(reg_key, {})
@@ -353,7 +356,7 @@ class FPGAInterface:
                         entry_name = f"{module_id}_{reg_name_id}"
 
                         # C enum entry
-                        comma = "," if i < reg_count - 1 else ""
+                        comma = "," if i < (reg_count-subregisters) - 1 else ""
                         if not new_c_header:
                             c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
                             c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
@@ -366,7 +369,7 @@ class FPGAInterface:
                             if reg_perm:
                                 c_addr_macros.append(f"// Register Permissions: {reg_perm}")
                         else:
-                            if i < reg_count-1:
+                            if i < (reg_count-subregisters)-1:
                                 c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i},")
                             else:
                                 c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i}")
