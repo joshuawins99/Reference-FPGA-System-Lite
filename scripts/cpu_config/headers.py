@@ -262,13 +262,18 @@ class SerialTransport(TransportInterface):
     def write(self, data: str):
         self.serial.write(data.encode('utf-8'))
     def read(self) -> str:
+        # ASCII text
         read_data = self.serial.readline()
         return read_data.decode('utf-8').strip()
+    def read_raw(self) -> bytes:
+        # raw bytes
+        return self.serial.readline()
 
 class FPGAInterface:
     def __init__(self, transport: TransportInterface, queue_enabled=0):
         self.transport = transport
         self.queue_enabled = queue_enabled
+        Register.interface = self
 
     def read(self, address):
         cmd = f"rFPGA,{int(address)}\\n"
@@ -282,7 +287,57 @@ class FPGAInterface:
     def write(self, address, value):
         cmd = f"wFPGA,{int(address)},{int(value)}\\n"
         self.transport.write(cmd)
-                            """)
+                            
+    def version(self):
+        cmd = f"readFPGAVersion\\n"
+        self.transport.write(cmd)
+        return self.transport.read()
+    
+    def __dir__(self):
+        # Collect all callable methods (functions)
+        funcs = [
+            name for name in dir(type(self))
+            if callable(getattr(type(self), name, None)) and not name.startswith("_")
+        ]
+        funcs += [
+            name for name, val in self.__dict__.items()
+            if callable(val) and not name.startswith("_")
+        ]
+
+        # Collect all register blocks (instances of CompactRegisterBlock)
+        blocks = [
+            name for name, val in self.__dict__.items()
+            if isinstance(val, CompactRegisterBlock)
+        ]
+        blocks += [
+            name for name in dir(type(self))
+            if isinstance(getattr(type(self), name, None), CompactRegisterBlock)
+        ]
+
+        return sorted(set(funcs + blocks))
+
+    def list_blocks(self):
+        # Look at both instance and class attributes
+        blocks = []
+
+        # Instance-level
+        for name, obj in self.__dict__.items():
+            if isinstance(obj, CompactRegisterBlock):
+                blocks.append((name, obj))
+
+        # Class-level
+        for name, obj in vars(type(self)).items():
+            if isinstance(obj, CompactRegisterBlock):
+                blocks.append((name, obj))
+
+        if not blocks:
+            print("No CompactRegisterBlock instances found.")
+            return
+
+        print("Available Modules (Sorted By Base Address):")
+        for name, block in sorted(blocks, key=lambda item: item[1].base):
+            print(f"    {name} - {block.count} register(s) @ 0x{block.base:04X}")
+        """)
             
         temp_module_storage = []
 
@@ -421,8 +476,9 @@ class FPGAInterface:
                                 temp_module_storage.append(f"]")
                         if subblock_placed == True:
                             subblock_name = f"_{module_id}_subblocks"
-                    if any(x[2] == module_name for x in current_submodule_map):
-                        hidden_entry_prefix = "_"
+                    # if any(x[2] == module_name for x in current_submodule_map):
+                    #     hidden_entry_prefix = "_"
+                    hidden_entry_prefix = "_"
                     #Normal Module Logic
                     register_defs = []
                     if (mod_reg_expand_str == 'FALSE'):
@@ -475,6 +531,8 @@ class FPGAInterface:
                         temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, _{module_id}_reg_defs, {subblock_name})\n")
                     else:
                         temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, None, {subblock_name})\n")
+                    if not(any(x[2] == module_name for x in current_submodule_map)):
+                        temp_module_storage.append(f"FPGAInterface.{module_id.lower()} = _{module_id.lower()}")
                     module_storage[0:0] = temp_module_storage
 
         with open(c_filename, "w") as f:
