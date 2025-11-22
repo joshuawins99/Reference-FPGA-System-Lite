@@ -318,7 +318,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                     lines.append(f"{submodule_indent}        -> Submodule: {mod_name_str} ({module_name})")
                 else:
                     lines.append(f"{submodule_indent}        -> Module: {mod_name_str} ({module_name})")
-                lines.append(f"{submodule_indent}            - Bounds: 'h{start_addr:04X} to 'h{end_addr:04X}")
+                lines.append(f"{submodule_indent}            - Bounds: 0x{start_addr:04X} ({start_addr:0d}) to 0x{end_addr:04X} ({end_addr:0d})")
                 lines.append(f"{submodule_indent}            - Register Count: {reg_count}")
                 if mod_desc_str:
                     indent = " " * 12
@@ -340,7 +340,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
 
                         lines.append("")
                         lines.append(f"{submodule_indent}            -> {reg_key}: {reg_name_str}")
-                        lines.append(f"{submodule_indent}                - Address: 'h{reg_addr:04X}")
+                        lines.append(f"{submodule_indent}                - Address: 0x{reg_addr:04X} ({reg_addr:0d})")
                         if reg_desc_str:
                             indent = " " * 16
                             desc_lines = reg_desc_str.split('\n')

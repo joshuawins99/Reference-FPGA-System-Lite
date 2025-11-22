@@ -555,7 +555,11 @@ def parse_config(file_path):
     for section, data in config_data.items():
             if section == "BUILTIN_MODULES" or section == "USER_MODULES":
                 for module, module_data in data.items():
-                    submodule_data = module_data.get('submodule_of', '')
+                    try:
+                        submodule_data = module_data.get('submodule_of', '')
+                    except:
+                        if module == "BaseAddress": continue #Indicates that the section has a base address specified and should be skipped
+                        else: raise SyntaxError (f"Module entry {module} not valid")
                     try:
                         registers_to_add = int(resolve_expression(module_data.get('registers', '0'), parameters_list))
                     except:
