@@ -1,4 +1,5 @@
 #include "io.h"
+#include "utility.h"
 
 static CommandQueue cmdQueue = { .head = 0, .tail = 0 };
 static unsigned char queueMode = 0; // 0 = immediate, 1 = queue mode
@@ -53,6 +54,7 @@ void executeQueuedCommands() {
 void printQueuedCommands() {
     unsigned char i;
     char label[8];
+    char *index_str;
 
     if (isQueueEmpty()) {
         Print(1, "Command queue empty");
@@ -60,29 +62,26 @@ void printQueuedCommands() {
     }
 
     for (i = cmdQueue.head; i < cmdQueue.tail; ++i) {
-        sprintf(label, "%d: ", i - cmdQueue.head);
+        index_str = u32_to_ascii(i - cmdQueue.head);
+
+        str_cpy(label, index_str); // copy index into label
+        str_cat(label, ": "); // append ": " to the end
+
         Print(0, label);
         Print(1, cmdQueue.commands[i]);
     }
 }
 
-void Print(unsigned char line, char *data) {
-    unsigned char busy_status = 0;
-    unsigned char iterator = 0;
-    unsigned char strlength = strlen(data);
-
-    while (iterator < strlength || (line && iterator == strlength)) {
-        busy_status = ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD));
-        if (busy_status == 0) {
-            if (iterator < strlength) {
-                WriteIO(UART_CPU_BaseAddress, data[iterator]);
-                ++iterator;
-            } else if (line) {
-                WriteIO(UART_CPU_BaseAddress, '\n');
-                line = 0;  // To exit the loop after writing the newline character
-            }
-            WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
-        }
+void Print(unsigned char line, const char *data) {
+    while (*data) {
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0); // wait until UART not busy
+        WriteIO(UART_CPU_BaseAddress, *data++);
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+    }
+    if (line) {
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
+        WriteIO(UART_CPU_BaseAddress, '\n');
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
     }
 }
 
@@ -104,8 +103,9 @@ char* ReadVersion() {
 }
 
 char* readFPGA(uint32_t addr) {
-    static char rd_data[11];
-    sprintf(rd_data, "%u", ReadIO32(addr));
+    char *rd_data;
+
+    rd_data = u32_to_ascii(ReadIO32(addr));
     return rd_data;
 }
 
@@ -114,9 +114,7 @@ void writeFPGA(uint32_t addr, uint32_t data) {
 }
 
 uint32_t checkAddress(uint32_t addr_val) {
-    // Check if address is aligned to ADDR_WORD boundary
-    if (addr_val % ADDR_WORD != 0) return 0;
-
+    if (addr_val & (ADDR_WORD - 1)) return 0;
     return addr_val;
 }
 
@@ -236,20 +234,6 @@ char* helpWrapper (char *data) {
     return NULL;
 }
 
-unsigned char stringMatch(const char *a, const char *b, unsigned char len) {
-    unsigned char i;
-
-    for (i = 0; i < len; ++i) {
-        if (a[i] != b[i]) {
-            return 0;  // mismatch
-        }
-        if (a[i] == '\0') {
-            break;  // premature end of string
-        }
-    }
-    return 1;  // match
-}
-
 char* executeCommandsSerial(char *data) {
     unsigned char i;
     
@@ -276,7 +260,6 @@ void UARTCommand (char *data) {
 
 void ReadUART() {
     static unsigned char char_iter;
-    char *commandOutput;
     static char readuart[MAX_LINE_LENGTH];
 
     if (ReadIO(UART_CPU_BaseAddress+(4*ADDR_WORD)) == 0) {

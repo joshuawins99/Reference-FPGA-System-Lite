@@ -493,9 +493,11 @@ class FPGAInterface:
                                     try:
                                         upper_bounds = resolve_expression(field_data['bounds'][0], parameter_table)
                                         lower_bounds = resolve_expression(field_data['bounds'][1], parameter_table)
+                                        if upper_bounds < 0 or lower_bounds < 0 or upper_bounds == None or lower_bounds == None:
+                                            raise SyntaxError(f"Field Bounds for {module_name} is not valid")
                                         width = abs(upper_bounds - lower_bounds)+1
                                     except Exception:
-                                        lower_bounds = width = 0
+                                        raise SyntaxError(f"Field Bounds for {module_name} is not valid")
                                     field_name = sanitize_identifier(field_data.get('name', ''))
                                     reg_fields.append((field_name.lower(), lower_bounds, width, field_data.get('description', '')))
                             else:

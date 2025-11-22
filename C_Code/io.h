@@ -40,7 +40,7 @@ void enqueueCommand(const char *);
 char* dequeueCommand();
 void executeQueuedCommands();
 void printQueuedCommands();
-void Print (unsigned char, char *);
+void Print (unsigned char, const char *);
 char* ReadVersion ();
 char* readFPGA (uint32_t);
 void writeFPGA (uint32_t, uint32_t);

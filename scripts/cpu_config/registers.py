@@ -278,6 +278,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
             lines.append(f"    Section: {section}")
 
             for module_name, module in cpu_config.get(section, {}).items():
+                module_name_orig = module_name
                 if module_name == "BaseAddress" or not isinstance(module, dict):
                     continue
                 if module.get("flag") != "TRUE":
@@ -354,9 +355,16 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                         for field_key, field_info in fields.items():
                             fname = field_info.get("name", field_key)
                             fbounds = field_info.get("bounds", [])
+                            try:
+                                fupper = resolve_expression(fbounds[0], parameter_table)
+                                flower = resolve_expression(fbounds[1], parameter_table)
+                                if fupper == None or flower == None or fupper < 0 or flower < 0:
+                                    raise SyntaxError(f"Field Bounds for {module_name_orig} is not valid")
+                            except:
+                                raise SyntaxError(f"Field Bounds for {module_name_orig} is not valid")
                             fdesc = field_info.get("description", "")
                             lines.append(f"{submodule_indent}                -> {field_key}: {fname}")
-                            lines.append(f"{submodule_indent}                    - Bits: [{fbounds[0]}:{fbounds[1]}]")
+                            lines.append(f"{submodule_indent}                    - Bits: [{fupper}:{flower}]")
                             if fdesc:
                                 desc_lines = fdesc.split('\n')
                                 formatted_desc = f"{submodule_indent}                    - Description: {desc_lines[0]}"
