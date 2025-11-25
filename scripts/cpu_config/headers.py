@@ -2,7 +2,7 @@ import os
 import re
 from registers import resolve_expression, build_parameter_table, reorder_tree
 
-def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False):
+def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False, zig_header=False):
 
     def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
@@ -13,11 +13,78 @@ def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, re
         current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
 
         c_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.h")
+        zig_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.zig")
         py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
 
         c_lines = []
         py_lines = []
+        zig_lines = []
         module_storage = []
+
+        # Zig Header Boilerplate
+        zig_lines.append("""
+pub const CompactRegisterBlock = struct {
+    base: usize,
+    count: usize,
+    address_wording: usize,
+
+    pub inline fn init(base: usize, count: usize, address_wording: usize) CompactRegisterBlock {
+        return CompactRegisterBlock{
+            .base = base,
+            .count = count,
+            .address_wording = address_wording,
+        };
+    }
+
+    pub inline fn regAt(self: CompactRegisterBlock, index: usize) usize {
+        return self.base + index * self.address_wording;
+    }
+};        
+               
+pub const Register = struct {
+    block: CompactRegisterBlock,
+    offset: usize,
+    perm: Permission,
+
+    pub const Permission = enum {
+        ReadOnly,   // "R"
+        WriteOnly,  // "W"
+        ReadWrite,  // "R/W"
+    };
+
+    pub inline fn addr(self: Register) usize {
+        return self.block.regAt(self.offset);
+    }
+
+    pub inline fn write32(self: Register, val: u32) void {
+        if (self.perm == .ReadOnly)
+            @compileError("Attempt to write to a read-only register");
+        const ptr: *volatile u32 = @ptrFromInt(self.addr());
+        ptr.* = val;
+    }
+
+    pub inline fn read32(self: Register) u32 {
+        if (self.perm == .WriteOnly)
+            @compileError("Attempt to read from a write-only register");
+        const ptr: *volatile u32 = @ptrFromInt(self.addr());
+        return ptr.*;
+    }
+
+    pub inline fn write8(self: Register, val: u8) void {
+        if (self.perm == .ReadOnly)
+            @compileError("Attempt to write to a read-only register");
+        const ptr: *volatile u8 = @ptrFromInt(self.addr());
+        ptr.* = val;
+    }
+
+    pub inline fn read8(self: Register) u8 {
+        if (self.perm == .WriteOnly)
+            @compileError("Attempt to read from a write-only register");
+        const ptr: *volatile u8 = @ptrFromInt(self.addr());
+        return ptr.*;
+    }
+};                    
+""")
 
         # C Header Boilerplate
         c_lines.append("// Auto-generated register map header")
@@ -372,12 +439,14 @@ class FPGAInterface:
 
                 # === Module Documentation ===
                 c_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                zig_lines.append(f"// Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"// Module Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
                         formatted_desc += f"\n//                    {line}"
                     c_lines.append(formatted_desc)
+                    zig_lines.append(formatted_desc)
                 temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
                     desc_lines = mod_desc_str.split('\n')
@@ -400,6 +469,8 @@ class FPGAInterface:
                 if (mod_reg_expand_str == 'FALSE'):
                     if new_c_header:
                         c_addr_macros.append(f"enum {{")
+                    zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
                     for i in range(reg_count-subregisters):
                         addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
@@ -409,6 +480,7 @@ class FPGAInterface:
                         reg_perm = reg_info.get("permissions", "").strip()
                         reg_name_id = sanitize_identifier(reg_name_raw)
                         entry_name = f"{module_id}_{reg_name_id}"
+                        reg_perm_zig = ""
 
                         # C enum entry
                         comma = "," if i < (reg_count-subregisters) - 1 else ""
@@ -429,7 +501,20 @@ class FPGAInterface:
                             else:
                                 c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i}")
                                 c_addr_macros.append(f"}} {module_id}_REGISTERS_E;")
-
+                        if reg_perm:
+                            if reg_perm == "R":
+                                reg_perm_zig = "ReadOnly"
+                            if reg_perm == "W":
+                                reg_perm_zig = "WriteOnly"
+                            if reg_perm == "R/W":
+                                reg_perm_zig = "ReadWrite"
+                        else:
+                            reg_perm_zig = "ReadWrite"
+                        if i < (reg_count-subregisters)-1:
+                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig}}};")
+                        else:
+                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig}}};")
+                            zig_lines.append(f"}};")
                         # Python enum entry
                         if not new_python_header:
                             py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
@@ -443,12 +528,15 @@ class FPGAInterface:
                                 py_addr_lines.append(formatted_desc)
                             if reg_perm:
                                 py_addr_lines.append(f"# Register Permissions: {reg_perm}")
-
+                else:
+                    zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
+                    zig_lines.append(f" }};")
                 #c_lines.append(f"typedef enum {{")
                 #c_lines.extend(c_enum_entries)
                 #c_lines.append(f"}} {enum_name};\n")
                 c_lines.extend(c_addr_macros)
-                c_lines.append(f"const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
+                c_lines.append(f"static const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
 
                 #py_lines.extend(py_enum_entries)
                 py_lines.extend(py_addr_lines)
@@ -540,6 +628,11 @@ class FPGAInterface:
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
         print(f"C header for {cpu_name} saved to: {c_filename}")
+
+        if zig_header:
+            with open(zig_filename, "w") as f:
+                f.write("\n".join(zig_lines))
+            print(f"Zig header for {cpu_name} saved to: {zig_filename}")
 
         for entry in module_storage:
             py_lines.append(entry)

@@ -76,7 +76,7 @@ fi
 cat ref_fpga_sys_lite.sv >> irq.sv
 mv irq.sv ref_fpga_sys_lite.sv
 
-if [ "$BUILD_MODE" = true ] && [ "$VERSION_TYPE" = REL ]; then
+if [ "$BUILD_MODE" = true ]; then
     scripts/cpu_config/combine_gen_cpu_deps.py
     cd sim
     ../generate_cpu_instance.py
@@ -85,7 +85,11 @@ if [ "$BUILD_MODE" = true ] && [ "$VERSION_TYPE" = REL ]; then
 
     if grep -q "Testbench Passed!" sim_result.txt; then
         echo "Testbench Passed!"
-        tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv generate_cpu_instance.py
+        if [ "$VERSION_TYPE" = REL ]; then
+            tar -czf v$(cat version).tar.gz ref_fpga_sys_lite.sv generate_cpu_instance.py
+        else
+            tar -czf $(git rev-parse --verify HEAD | cut -c1-7)"(v$(cat version))".tar.gz ref_fpga_sys_lite.sv generate_cpu_instance.py
+        fi
         rm generate_cpu_instance.py
     else
         echo "Testbench Failed!"

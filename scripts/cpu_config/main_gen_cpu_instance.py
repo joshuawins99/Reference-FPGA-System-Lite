@@ -56,6 +56,7 @@ if "--save-user-registers" in sys.argv:
     if (filtered_dirs):
         dump_all_registers_from_configs(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=True, save_to_file=True, print_to_console=True)
 
+zig_header = False
 if "--gen-headers" in sys.argv:
     new_python_header = False
     new_c_header = False
@@ -73,8 +74,11 @@ if "--gen-headers" in sys.argv:
     if "new-c" in gen_headers_options:
         new_c_header = True
 
+    if "zig" in gen_headers_options:
+        zig_header = True
+
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header)
+        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header)
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)
@@ -109,6 +113,11 @@ if "--build" in sys.argv:
                                 os.remove(f"{build_folder}/{cpu_name}_registers.h")
                             print(f"Moved generated header: {absolute_path}/{cpu_name}/{cpu_name}_registers.h -> {build_folder}\n")
                             shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.h", build_folder)
+                            if zig_header:
+                                if os.path.exists(f"{build_folder}/{cpu_name}_registers.zig"):
+                                    os.remove(f"{build_folder}/{cpu_name}_registers.zig")
+                                print(f"Moved generated header: {absolute_path}/{cpu_name}/{cpu_name}_registers.zig -> {build_folder}\n")
+                                shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.zig", build_folder)
                     result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
                     print(result.stdout + result.stderr)
                 except FileNotFoundError:
