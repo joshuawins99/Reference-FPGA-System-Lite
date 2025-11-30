@@ -4,6 +4,7 @@ MODELSIM_ROOT_DIR=/root/QuestaSim/questasim/linux_x86_64
 CUSTOM_C_FOLDER="C_Code"
 BUILD_MODE=""
 VERSION_TYPE=""
+CURRENT_BASE_FOLDER=$(pwd -P)
 
 resolve_path() {
     local INPUT_PATH="$1"
@@ -38,9 +39,9 @@ CUSTOM_C_FOLDER="$(resolve_path "$CUSTOM_C_FOLDER")"
 
 rm -f ref_fpga_sys_lite.sv *.tar.gz sim_result.txt
 
-cd rv32_gcc
-./build.sh --c-folder "$CUSTOM_C_FOLDER"
-cd ..
+cd $CUSTOM_C_FOLDER
+./build.sh
+cd $CURRENT_BASE_FOLDER
 
 cd rtl
 echo -n '`define version_string ' > version_string.svh
@@ -60,10 +61,10 @@ echo -n ' ' >> version_string.svh
 date --date 'now' '+%a %b %d %r %Z %Y' | sed -e 's/$/"/' -e 's/,/","/g' >> version_string.svh
 cd ..
 
-scripts/create_memory_module.py mem_init.mem rtl/picosoc_mem.v
+scripts/create_memory_module.py $CUSTOM_C_FOLDER/mem_init.mem rtl/picosoc_mem.v
 scripts/concatenate_modules.sh cpu_system_filelist.txt ref_fpga_sys_lite.sv
 
-irq_result=$(nm rv32_gcc/a.elf | grep -w irq | awk '{print $1}')
+irq_result=$(nm $CUSTOM_C_FOLDER/a.elf | grep -w irq | awk '{print $1}')
 
 if [ -n "$irq_result" ]; then
     echo "Found IRQ Function at: 0x$irq_result"
