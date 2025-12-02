@@ -1,6 +1,6 @@
 MEMORY
 {
-  RAM (rwx) : ORIGIN = 0x0, LENGTH = 0x2800 /* Total 12KB */
+  RAM (rwx) : ORIGIN = 0x0, LENGTH = 0x2000 /* Total 8KB */
 }
 
 SECTIONS
@@ -48,7 +48,7 @@ SECTIONS
   .stack (NOLOAD) : {
     . = ALIGN(4);
     __stack_end = .; /* Bottom of stack */
-    . = . + 0x100;   /* Reserve 256 bytes for stack */
+    . = . + 0x400;   /* Reserve 256 bytes for stack */
     __stack_top = .; /* Top of stack */
   } > RAM
    _end = .;

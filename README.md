@@ -61,7 +61,7 @@ BUILTIN_PARAMETERS:
     BaudRateCPU : 230400,
     address_width : 16,
     data_width : 32,
-    RAM_Size : 10240,
+    RAM_Size : 'h2000,
     Program_CPU_Start_Address : 'h0 : {31:0},
     VersionStringSize : 64,
     EnableCPUIRQ : 0,

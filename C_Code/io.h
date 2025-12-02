@@ -1,3 +1,5 @@
+#include "slice.h"
+
 #define Version_String_BaseAddress 0x8000
 #define IO_CPU_BaseAddress         0x9000
 #define UART_CPU_BaseAddress       0x9100
@@ -14,12 +16,13 @@
 #define ReadIO(addr)        (*(volatile unsigned char*) (addr))
 #define ReadIO32(addr)      (*(volatile uint32_t*) (addr))
 
-typedef char* (*command_func)(char*);
+typedef SliceU8 (*command_func)(SliceU8);
+
+#define CMD_ENTRY(str, fn) { { (unsigned char*)(str), sizeof(str)-1 }, fn }
 
 typedef struct {
-    const char *command;
+    const SliceU8 command;
     command_func func;
-    unsigned char length;
 } command_entry;
 
 typedef struct {
@@ -36,18 +39,17 @@ typedef struct {
 
 unsigned char isQueueFull();
 unsigned char isQueueEmpty();
-void enqueueCommand(const char *);
+void enqueueCommand(const SliceU8);
 char* dequeueCommand();
 void executeQueuedCommands();
 void printQueuedCommands();
 void Print (unsigned char, const char *);
-char* ReadVersion ();
-char* readFPGA (uint32_t);
+void PrintSlice (unsigned char, const SliceU8);
+SliceU8 ReadVersion ();
+SliceU8 readFPGA (uint32_t);
 void writeFPGA (uint32_t, uint32_t);
-unsigned char stringMatch (const char *, const char *, unsigned char);
-char* executeCommandsSerial(char *);
-void UARTCommand(char *);
+SliceU8 executeCommandsSerial(SliceU8);
+void UARTCommand(SliceU8);
 void ReadUART();
 uint32_t checkAddress(uint32_t);
-ParsedCommand ParseCommand(char *);
-
+ParsedCommand ParseCommand(SliceU8);

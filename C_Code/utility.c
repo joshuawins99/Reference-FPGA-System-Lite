@@ -1,3 +1,4 @@
+#include "utility.h"
 char* str_cpy(char* dest, const char* src) {
     int i = 0;
     while (src[i] != '\0') {
@@ -43,6 +44,16 @@ unsigned char stringMatch(const char *a, const char *b, unsigned char len) {
 
     for (i = 0; i < len; ++i) {
         if (a[i] != b[i]) return 0;
+    }
+    return 1;
+}
+
+unsigned char stringMatchSlice(SliceU8 a, SliceU8 b) {
+    slen_t i;
+    if (a.len < b.len) return 0;
+
+    for (i = 0; i < b.len; ++i) {
+        if (a.ptr[i] != b.ptr[i]) return 0;
     }
     return 1;
 }

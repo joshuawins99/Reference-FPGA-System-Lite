@@ -12,13 +12,12 @@ unsigned char isQueueEmpty() {
     return cmdQueue.head == cmdQueue.tail;
 }
 
-void enqueueCommand(const char *cmd) {
+void enqueueCommand(SliceU8 data) {
     unsigned char i = 0;
-    char current_char;
 
     if (!isQueueFull()) {
-        while (i < MAX_LINE_LENGTH - 1 && (current_char = cmd[i]) != '\0') {
-            cmdQueue.commands[cmdQueue.tail][i] = current_char;
+        while (i < data.len) {
+            cmdQueue.commands[cmdQueue.tail][i] = data.ptr[i];
             ++i;
         }
         cmdQueue.commands[cmdQueue.tail][i] = '\0';
@@ -40,13 +39,13 @@ char* dequeueCommand() {
 
 void executeQueuedCommands() {
     char *cmd;
-    char *result;
+    SliceU8 result;
 
     while (!isQueueEmpty()) {
         cmd = dequeueCommand();
-        result = executeCommandsSerial(cmd);
-        if (result) {
-            Print(1, result);
+        result = executeCommandsSerial(cstr_to_slice(cmd));
+        if (result.ptr != NULL && result.len > 0) {
+            PrintSlice(1, result);
         }
     }
 }
@@ -85,8 +84,24 @@ void Print(unsigned char line, const char *data) {
     }
 }
 
-char* ReadVersion() {
-    static char readversion[VersionStringSize];
+void PrintSlice(unsigned char line, const SliceU8 data) {
+    unsigned char *ptr = data.ptr;
+    slen_t length = data.len;
+
+    while (length--) {
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0); // wait until UART not busy
+        WriteIO(UART_CPU_BaseAddress, *ptr++);
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+    }
+    if (line) {
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
+        WriteIO(UART_CPU_BaseAddress, '\n');
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+    }
+}
+
+SliceU8 ReadVersion() {
+    static char readversion[VersionStringSize+1];
     char current_char;
     unsigned char count = 0;
     unsigned char i;
@@ -99,14 +114,15 @@ char* ReadVersion() {
             readversion[i-count] = current_char;
         }
     }
-    return readversion;
+    
+    return slice_range(readversion, 0, (i-count));
 }
 
-char* readFPGA(uint32_t addr) {
+SliceU8 readFPGA(uint32_t addr) {
     char *rd_data;
-
+    
     rd_data = u32_to_ascii(ReadIO32(addr));
-    return rd_data;
+    return cstr_to_slice(rd_data);
 }
 
 void writeFPGA(uint32_t addr, uint32_t data) {
@@ -118,7 +134,7 @@ uint32_t checkAddress(uint32_t addr_val) {
     return addr_val;
 }
 
-ParsedCommand ParseCommand(char *input) {
+ParsedCommand ParseCommand(SliceU8 input) {
     ParsedCommand result = {0};
     unsigned char i = 0;
     unsigned char j = 0;
@@ -126,11 +142,11 @@ ParsedCommand ParseCommand(char *input) {
     uint32_t val;
     char current_char;
 
-    while (field < MAX_CMD_ARGS && input[i] != '\0' && input[i] != '\n') {
+    while (field < MAX_CMD_ARGS && i < input.len && input.ptr[i] != '\n') {
         j = 0;
         val = 0;
 
-        while ((current_char = input[i]) != ',' && current_char != '\0' && current_char != '\n') {
+        while (i < input.len && (current_char = input.ptr[i]) != ',' && current_char != '\n') {
             if (current_char >= '0' && current_char <= '9') {
                 //val = val * 10 + (current_char - '0');
                 val = (val << 3) + (val << 1) + (current_char - '0');
@@ -145,14 +161,14 @@ ParsedCommand ParseCommand(char *input) {
         result.values[field] = val;
         field++;
 
-        if (input[i] == ',') i++;
+        if (input.ptr[i] == ',') i++;
     }
 
     result.valueCount = field;
     return result;
 }
 
-char* readFPGAWrapper(char *data) {
+SliceU8 readFPGAWrapper(SliceU8 data) {
     ParsedCommand cmd_data;
     uint32_t addr_val;
     cmd_data = ParseCommand(data);
@@ -160,43 +176,43 @@ char* readFPGAWrapper(char *data) {
     return readFPGA(addr_val);
 }
 
-char* writeFPGAWrapper(char *data) {
+SliceU8 writeFPGAWrapper(SliceU8 data) {
     ParsedCommand cmd_data;
     uint32_t addr_val;
     cmd_data = ParseCommand(data);
     addr_val = checkAddress(cmd_data.values[1]);
     writeFPGA(addr_val, cmd_data.values[2]);
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* enterQueueMode(char *data) {
+SliceU8 enterQueueMode(SliceU8 data) {
     queueMode = 1;
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* exitQueueMode(char *data) {
+SliceU8 exitQueueMode(SliceU8 data) {
     queueMode = 0;
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* runQueueCommands(char *data) {
+SliceU8 runQueueCommands(SliceU8 data) {
     queueMode = 0;
     executeQueuedCommands();
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* clearQueue(char *data) {
+SliceU8 clearQueue(SliceU8 data) {
     cmdQueue.head = 0;
     cmdQueue.tail = 0;
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* printQueueWrapper (char *data) {
+SliceU8 printQueueWrapper (SliceU8 data) {
     printQueuedCommands();
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* helpWrapper(char *data);
+SliceU8 helpWrapper(SliceU8 data);
 
 const char READF[]       = "rFPGA";
 const char WRITEF[]      = "wFPGA";
@@ -209,52 +225,52 @@ const char PRINT_QUEUE[] = "printQueue";
 const char HELP[]        = "help";
 
 const command_entry commands[] = {
-    {READF,       readFPGAWrapper,    sizeof(READF)-1      },
-    {WRITEF,      writeFPGAWrapper,   sizeof(WRITEF)-1     },
-    {RVERSION,    ReadVersion,        sizeof(RVERSION)-1   },
-    {ENTER_QUEUE, enterQueueMode,     sizeof(ENTER_QUEUE)-1},
-    {EXIT_QUEUE,  exitQueueMode,      sizeof(EXIT_QUEUE)-1 },
-    {RUN_QUEUE,   runQueueCommands,   sizeof(RUN_QUEUE)-1  },
-    {CLEAR_QUEUE, clearQueue,         sizeof(CLEAR_QUEUE)-1},
-    {PRINT_QUEUE, printQueueWrapper,  sizeof(PRINT_QUEUE)-1},
-    {HELP,        helpWrapper,        sizeof(HELP)-1       }
+    CMD_ENTRY(READF,       readFPGAWrapper),
+    CMD_ENTRY(WRITEF,      writeFPGAWrapper),
+    CMD_ENTRY(RVERSION,    ReadVersion),
+    CMD_ENTRY(ENTER_QUEUE, enterQueueMode),
+    CMD_ENTRY(EXIT_QUEUE,  exitQueueMode),
+    CMD_ENTRY(RUN_QUEUE,   runQueueCommands),
+    CMD_ENTRY(CLEAR_QUEUE, clearQueue),
+    CMD_ENTRY(PRINT_QUEUE, printQueueWrapper),
+    CMD_ENTRY(HELP,        helpWrapper)
 
     // **** Add New Commands Here **** //
 };
 
 const unsigned char num_commands = sizeof(commands) / sizeof(commands[0]); //Divide total size in bytes by the size in bytes of a single element
 
-char* helpWrapper (char *data) {
+SliceU8 helpWrapper (SliceU8 data) {
     unsigned char i;
 
     Print(1, "Available Commands:");
     for (i = 0; i < num_commands; ++i) {
-        Print(1,(char *)commands[i].command);
+        Print(1,(char *)commands[i].command.ptr);
     }
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-char* executeCommandsSerial(char *data) {
+SliceU8 executeCommandsSerial(SliceU8 data) {
     unsigned char i;
     
     for (i = 0; i < num_commands; ++i) {
-        if (stringMatch(data, commands[i].command, commands[i].length) == 1) {
-            if (queueMode == 1 && commands[i].command != EXIT_QUEUE) {
+        if (stringMatchSlice(data, commands[i].command) == 1) {
+            if (queueMode == 1 && commands[i].command.ptr != (const unsigned char*)EXIT_QUEUE) {
                 enqueueCommand(data);
-                return NULL;
+                return cstr_to_slice(NULL);
             }
             return commands[i].func(data);
         }
     }
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
-void UARTCommand (char *data) {
-    char *commandOutput;
+void UARTCommand (SliceU8 data) {
+    SliceU8 commandOutput;
 
     commandOutput = executeCommandsSerial(data);
-    if (commandOutput != NULL) {
-        Print(1, commandOutput);
+    if (commandOutput.ptr != NULL && commandOutput.len > 0) {
+        PrintSlice(1, commandOutput);
     }
 }
 
@@ -267,9 +283,8 @@ void ReadUART() {
         if (readuart[char_iter] != '\n') {
             ++char_iter;
         } else {
-            readuart[char_iter] = (char) 0;
+            UARTCommand(slice_range_safe(readuart, MAX_LINE_LENGTH, 0, char_iter));
             char_iter = 0;
-            UARTCommand(readuart);
         }
     }
 }
