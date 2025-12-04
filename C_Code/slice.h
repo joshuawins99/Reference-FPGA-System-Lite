@@ -1,10 +1,10 @@
 #ifndef SLICE_H
 #define SLICE_H
 
-typedef unsigned char slen_t;
+typedef uint8_t slen_t;
 
 typedef struct {
-    unsigned char *ptr;
+    uint8_t *ptr;
     slen_t len;
 } SliceU8;
 
@@ -20,28 +20,28 @@ typedef struct {
 #endif
 
 //Range-style safe: buf[start..end]
-SliceU8 slice_range_safe(unsigned char *buf, slen_t buf_len, slen_t start, slen_t end) {
+SliceU8 slice_range_safe(uint8_t *buf, slen_t buf_len, slen_t start, slen_t end) {
     SLICE_RUNTIME_CHECK(start <= end && end <= buf_len);
 
     return (SliceU8){ buf + start, end - start };
 }
 
 //Length-style safe: buf[start..start+length]
-SliceU8 slice_len_safe(unsigned char *buf, slen_t buf_len, slen_t start, slen_t length) {
+SliceU8 slice_len_safe(uint8_t *buf, slen_t buf_len, slen_t start, slen_t length) {
     SLICE_RUNTIME_CHECK(start + length <= buf_len);
 
     return (SliceU8){ buf + start, length };
 }
 
 //Range-style: buf[start..end]
-SliceU8 slice_range(unsigned char *buf, slen_t start, slen_t end) {
+SliceU8 slice_range(uint8_t *buf, slen_t start, slen_t end) {
     SLICE_RUNTIME_CHECK(start <= end);
 
     return (SliceU8){ buf + start, end - start };
 }
 
 //Length-style: buf[start..start+length]
-SliceU8 slice_len(unsigned char *buf, slen_t start, slen_t length) {
+SliceU8 slice_len(uint8_t *buf, slen_t start, slen_t length) {
 
     return (SliceU8){ buf + start, length };
 }
@@ -64,7 +64,7 @@ int slice_equal(SliceU8 a, SliceU8 b) {
 }
 
 //Safe access
-unsigned char slice_get(SliceU8 s, slen_t index) {
+uint8_t slice_get(SliceU8 s, slen_t index) {
     SLICE_RUNTIME_CHECK_GET(index < s.len);
     return s.ptr[index];
 }

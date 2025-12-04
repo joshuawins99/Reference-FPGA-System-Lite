@@ -1,6 +1,7 @@
 #include "utility.h"
+
 char* str_cpy(char* dest, const char* src) {
-    int i = 0;
+    uint32_t i = 0;
     while (src[i] != '\0') {
         dest[i] = src[i];
         i++;
@@ -10,13 +11,13 @@ char* str_cpy(char* dest, const char* src) {
 }
 
 char* str_cat(char* dest, const char* src) {
-    int i = 0;
+    uint32_t i = 0;
     // Find end of dest
     while (dest[i] != '\0') {
         i++;
     }
 
-    int j = 0;
+    uint32_t j = 0;
     // Copy src to end of dest
     while (src[j] != '\0') {
         dest[i] = src[j];
@@ -39,8 +40,8 @@ char* u32_to_ascii(uint32_t value) {
     return p;
 }
 
-unsigned char stringMatch(const char *a, const char *b, unsigned char len) {
-    unsigned char i;
+uint8_t stringMatch(const char *a, const char *b, uint8_t len) {
+    uint8_t i;
 
     for (i = 0; i < len; ++i) {
         if (a[i] != b[i]) return 0;
@@ -48,7 +49,7 @@ unsigned char stringMatch(const char *a, const char *b, unsigned char len) {
     return 1;
 }
 
-unsigned char stringMatchSlice(SliceU8 a, SliceU8 b) {
+uint8_t stringMatchSlice(SliceU8 a, SliceU8 b) {
     slen_t i;
     if (a.len < b.len) return 0;
 
@@ -56,4 +57,42 @@ unsigned char stringMatchSlice(SliceU8 a, SliceU8 b) {
         if (a.ptr[i] != b.ptr[i]) return 0;
     }
     return 1;
+}
+
+uint32_t checkAddress(uint32_t addr_val) {
+    if (addr_val & (ADDR_WORD - 1)) return 0;
+    return addr_val;
+}
+
+ParsedCommand ParseCommand(SliceU8 input) {
+    ParsedCommand result = {0};
+    slen_t i = 0;
+    uint8_t j = 0;
+    uint8_t field = 0;
+    uint32_t val;
+    char current_char;
+
+    while (field < MAX_CMD_ARGS && i < input.len && input.ptr[i] != '\n') {
+        j = 0;
+        val = 0;
+
+        while (i < input.len && (current_char = input.ptr[i]) != ',' && current_char != '\n') {
+            if (current_char >= '0' && current_char <= '9') {
+                val = (val << 3) + (val << 1) + (current_char - '0');
+            }
+            if (j < MAX_TOKEN_LENGTH-1) {
+                result.rawValues[field][j++] = current_char;
+            }
+            i++;
+        }
+
+        result.rawValues[field][j] = '\0';
+        result.values[field] = val;
+        field++;
+
+        if (input.ptr[i] == ',') i++;
+    }
+
+    result.valueCount = field;
+    return result;
 }
