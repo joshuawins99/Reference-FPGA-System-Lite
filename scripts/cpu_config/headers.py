@@ -449,7 +449,7 @@ class FPGAInterface:
                     continue
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
-                if  any(x[2] == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
+                if  any(x.module_name == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
                     continue
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
@@ -574,14 +574,14 @@ class FPGAInterface:
                     #Submodule specific Logic
                     subblock_name = None
                     hidden_entry_prefix = ""
-                    if any(x[2] == module_name for x in current_submodule_map) and module.get("submodule_of", "") or any(x[0] == module_name for x in current_submodule_map):
+                    if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", "") or any(x.base_module == module_name for x in current_submodule_map):
                         current_module = ""
                         subblock_placed = False
                         for idx, entry in enumerate(current_submodule_map):
-                            if entry[3] == module_name:
-                                sub_module = str(entry[2].split(entry[6])[-1])
+                            if entry.module_parent == module_name:
+                                sub_module = str(entry.module_name.split(entry.separator)[-1])
                                 get_current_addr = module.get("bounds")
-                                get_sub_addr = cpu_config[entry[1]][entry[2]]["bounds"]
+                                get_sub_addr = cpu_config[entry.section][entry.module_name]["bounds"]
                                 offset_from_base = resolve_expression(get_sub_addr[0], parameter_table)-resolve_expression(get_current_addr[0], parameter_table)
                                 if current_module != module_id:
                                     current_module = module_id
@@ -592,7 +592,7 @@ class FPGAInterface:
                                 temp_module_storage.append(f"]")
                         if subblock_placed == True:
                             subblock_name = f"_{module_id}_subblocks"
-                    # if any(x[2] == module_name for x in current_submodule_map):
+                    # if any(x.module_name == module_name for x in current_submodule_map):
                     #     hidden_entry_prefix = "_"
                     hidden_entry_prefix = "_"
                     #Normal Module Logic
@@ -649,7 +649,7 @@ class FPGAInterface:
                         temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, _{module_id}_reg_defs, {subblock_name})\n")
                     else:
                         temp_module_storage.append(f"{hidden_entry_prefix}{module_id.lower()} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes}, {(mod_name_str,mod_desc_str)}, None, {subblock_name})\n")
-                    if not(any(x[2] == module_name for x in current_submodule_map)):
+                    if not(any(x.module_name == module_name for x in current_submodule_map)):
                         temp_module_storage.append(f"FPGAInterface.{module_id.lower()} = _{module_id.lower()}")
                     module_storage[0:0] = temp_module_storage
 

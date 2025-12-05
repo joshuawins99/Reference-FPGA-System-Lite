@@ -58,12 +58,12 @@ def reorder_tree(data):
             # Group children by parent
             children = {}
             for t in tuples:
-                parent = t[3]  # parent reference
+                parent = t.module_parent  # parent reference
                 children.setdefault(parent, []).append(t)
 
             # Sort children of each parent by parse order (second to last element in tuple)
             for parent in children:
-                children[parent].sort(key=lambda x: x[-2])
+                children[parent].sort(key=lambda x: x.id_count)
 
             ordered = []
 
@@ -71,18 +71,18 @@ def reorder_tree(data):
                 if parent in children:
                     for child in children[parent]:
                         ordered.append(child)
-                        dfs(child[2])  # recurse into this child's children
+                        dfs(child.module_name)  # recurse into this child's children
 
             # Find roots (those whose parent is not listed as a child)
-            all_children = {t[2] for t in tuples}
-            roots = [t for t in tuples if t[3] not in all_children]
+            all_children = {t.module_name for t in tuples}
+            roots = [t for t in tuples if t.module_parent not in all_children]
 
             # Sort roots by parse order too
-            roots.sort(key=lambda x: x[-2])
+            roots.sort(key=lambda x: x.id_count)
 
             for root in roots:
                 ordered.append(root)
-                dfs(root[2])
+                dfs(root.module_name)
 
             result[cpu] = ordered
 
@@ -240,20 +240,20 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
     current_base_module_subregister_count = 0
     for cpu, data in submodule_reg_map.items():
         for submodule in data:
-            if current_base_module != submodule[0]:
-                current_base_module = submodule[0]
+            if current_base_module != submodule.base_module:
+                current_base_module = submodule.base_module
                 submodule_mask = []
-                current_base_module_start_addr = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["bounds"][0])
-                current_base_module_end_addr = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["bounds"][1])
-                current_base_module_subregister_count = resolve_expression(parsed_configs[cpu][submodule[1]][submodule[0]]["subregisters"])
+                current_base_module_start_addr = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][0])
+                current_base_module_end_addr = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][1])
+                current_base_module_subregister_count = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["subregisters"])
                 current_base_module_start_addr += 4*(int((current_base_module_end_addr-current_base_module_start_addr)//alignment + 1) - (current_base_module_subregister_count))
 
-            start_addr = find_free_address(submodule_mask, submodule[4]*alignment, current_base_module_start_addr)
-            end_addr = start_addr + (submodule[4]-1)*alignment
+            start_addr = find_free_address(submodule_mask, submodule.register_count*alignment, current_base_module_start_addr)
+            end_addr = start_addr + (submodule.register_count-1)*alignment
             submodule_mask.append((start_addr, end_addr))
-            if "subregisters" in parsed_configs[cpu][submodule[1]][submodule[2]]:
-                end_addr += resolve_expression(parsed_configs[cpu][submodule[1]][submodule[2]]["subregisters"])*alignment
-            parsed_configs[cpu][submodule[1]][submodule[2]]["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
+            if "subregisters" in parsed_configs[cpu][submodule.section][submodule.module_name]:
+                end_addr += resolve_expression(parsed_configs[cpu][submodule.section][submodule.module_name]["subregisters"])*alignment
+            parsed_configs[cpu][submodule.section][submodule.module_name]["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
 
 def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path, file_name="cpu_registers.txt", print_to_console=True, save_to_file=False, reg_width_bytes=4, user_modules_only=False):
     """
@@ -301,9 +301,9 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
                 if "submodule_of" in module:
                     for submodule in submodule_reg_map.get(cpu_name):
-                        if submodule[2] == module_name:
-                            submodule_indent = "    " * submodule[2].count(submodule[6])
-                            module_name = str(module_name.split(submodule[6])[-1])
+                        if submodule.module_name == module_name:
+                            submodule_indent = "    " * submodule.module_name.count(submodule.separator)
+                            module_name = str(module_name.split(submodule.separator)[-1])
                             break
                 else:
                     submodule_indent = ""

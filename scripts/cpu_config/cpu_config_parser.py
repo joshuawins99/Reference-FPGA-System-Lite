@@ -1,6 +1,7 @@
 import os
 import re
 from registers import reorder_tree, resolve_expression, build_parameter_table
+from collections import namedtuple
 
 def get_c_code_folders(parsed_configs):
     """Extracts C_CODE_FOLDER values from the parsed configs if present."""
@@ -550,6 +551,8 @@ def parse_config(file_path):
 
     #Build a map of submodules to add to base module recursively
     parameters_list = build_parameter_table(config_data)
+    #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
+    submodule_reg_add_map_tuple = namedtuple("submodule_reg_add_map_tuple", ["base_module", "section", "module_name", "module_parent", "register_count", "id_count", "separator"])
     submodule_reg_add_map = []
     id_count = 0
     for section, data in config_data.items():
@@ -566,8 +569,7 @@ def parse_config(file_path):
                         raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
                     if submodule_data:
                         submodule_data = module.split(submodule_identifier)
-                        #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
-                        submodule_reg_add_map.append((submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier))
+                        submodule_reg_add_map.append(submodule_reg_add_map_tuple(submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier))
                         id_count +=1
 
     submodule_reg_add_map_sorted_key = {}
