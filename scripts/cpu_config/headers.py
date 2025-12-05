@@ -180,21 +180,19 @@ class Register:
     def __init__(self, name, address, permission, description='', bitfield=None):
         self.name = name
         self.address = address
-        self.permission = self._normalize_permission(permission)
+        if not permission:
+            self.permission = 'R/W'
+        elif permission in ('R', 'W', 'R/W'):
+            self.permission = permission
+        else:
+            self.permission = 'R/W'
         self.description = description
         self.bitfield = bitfield
-        self._bit_proxies = {}
 
         if bitfield:
             for field_name, (pos, length, desc) in bitfield.fields.items():
                 proxy = BitProxy(self, field_name, pos, length, desc)
-                self._bit_proxies[field_name] = proxy
                 setattr(self, field_name, proxy)
-
-    def _normalize_permission(self, perm):
-        if not perm:
-            return 'R/W'
-        return perm if perm in ('R', 'W', 'R/W') else 'R/W'
 
     def read(self, interface=None):
         iface = interface or Register.interface
@@ -217,6 +215,8 @@ class CompactRegisterBlock:
         self.desc = module_defs[1] if module_defs else None
         self._registers = {}
         self._sub_blocks = {}
+        self._offsets = {}
+        self._bit_proxies = {}
 
         # Initialize registers
         if register_defs:
@@ -226,11 +226,17 @@ class CompactRegisterBlock:
                 name, perm = reg_def[0], reg_def[1]
                 desc = reg_def[2] if len(reg_def) > 2 else ''
                 bitfield_def = reg_def[3] if len(reg_def) > 3 else None
-                addr = self.reg_at(i)
+                addr = (self.base + reg_def[4]) if len(reg_def) > 4 else self.reg_at(i)
+                self._offsets[name.lower()] = reg_def[4] if len(reg_def) > 4 else None
                 bitfield = BitField(bitfield_def) if bitfield_def else None
                 reg = Register(name, addr, perm, desc, bitfield)
                 self._registers[name.lower()] = reg
                 setattr(self, name.lower(), reg)
+                if bitfield:
+                    for field_name, (pos, length, desc) in bitfield.fields.items():
+                        proxy = BitProxy(reg, field_name, pos, length, desc)
+                        self._bit_proxies[f"{name.lower()}.{field_name}"] = proxy
+                        setattr(reg, field_name, proxy)
 
         # Initialize nested blocks
         if sub_blocks:
@@ -272,8 +278,12 @@ class CompactRegisterBlock:
         self.base = new_base
 
         # Rebase registers
-        for i, reg in enumerate(self._registers.values()):
-            reg.address = self.reg_at(i)
+        for i, (name, reg) in enumerate(self._registers.items()):
+            offset = self._offsets.get(name)
+            if offset is not None:
+                reg.address = self.base + offset
+            else:
+                reg.address = self.reg_at(i)
 
         # Rebase sub-blocks recursively
         for name, block in self._sub_blocks.items():
@@ -286,33 +296,51 @@ class CompactRegisterBlock:
             print(f"{pad}Module Name: {self.name}")
         if self.desc:
             desc_lines = self.desc.splitlines()
-            for i, line in enumerate(desc_lines):
-                if i == 0:
-                    print(f"{pad}Module Description: {line}")
-                else:
-                    print(f"{pad}                   {line}")
+
+            prefix = f"{pad}Module Description: "
+            first_line = f"{prefix}{desc_lines[0]}"
+            print(first_line)
+
+            # indent subsequent lines to align with the description text
+            subsequent_indent = ' ' * len(prefix)
+
+            for line in desc_lines[1:]:
+                print(f"{subsequent_indent}{line}")
+
         print(f"{pad}Register Block @ 0x{self.base:04X} ({self.count} registers):")
         for name, reg in self._registers.items():
             if reg.description:
                 desc_lines = reg.description.splitlines()
-                for i, line in enumerate(desc_lines):
-                    if i == 0:
-                        print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}] - {line}")
-                    else:
-                        print(f"{pad}                                  {line}")
+                prefix = f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}]"
+                dash = " - "  # include the space after the dash
+                first_line = f"{prefix}{dash}{desc_lines[0]}"
+                print(first_line)
+
+                # indent so subsequent lines start exactly after " - "
+                subsequent_indent = ' ' * (len(prefix) + len(dash))
+
+                for line in desc_lines[1:]:
+                    print(f"{subsequent_indent}{line}")
             else:
                 print(f"{pad}  {name} @ 0x{reg.address:04X} [{reg.permission}]")
             if reg.bitfield:
                 for field_name, (pos, length, desc) in reg.bitfield.fields.items():
+                    prefix = f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}]"
+                    dash = " - "
                     if desc:
                         desc_lines = desc.splitlines()
-                        for i, line in enumerate(desc_lines):
-                            if i == 0:
-                                print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}] - {line}")
-                            else:
-                                print(f"{pad}                                         {line}")
+
+                        # first line
+                        first_line = f"{prefix}{dash}{desc_lines[0]}"
+                        print(first_line)
+
+                        # indent subsequent lines so they align with description text
+                        subsequent_indent = ' ' * (len(prefix) + len(dash))
+
+                        for line in desc_lines[1:]:
+                            print(f"{subsequent_indent}{line}")
                     else:
-                        print(f"{pad}    BitField '{field_name}': bits [{pos+length-1}:{pos}]")
+                        print(prefix)
         for name, block in self._sub_blocks.items():
             print(f"{pad}  Sub-block '{name}' @ 0x{block.base:04X}:")
             block.describe(indent + 2)

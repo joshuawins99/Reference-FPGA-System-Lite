@@ -54,7 +54,7 @@ SliceU8 subslice(SliceU8 s, slen_t start, slen_t length) {
 }
 
 //Compare two slices
-int slice_equal(SliceU8 a, SliceU8 b) {
+uint8_t slice_equal(SliceU8 a, SliceU8 b) {
     slen_t i;
     if (a.len != b.len) return 0;
     for (i = 0; i < a.len; i++) {

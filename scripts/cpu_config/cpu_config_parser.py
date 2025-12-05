@@ -187,10 +187,10 @@ def parse_config(file_path):
         # Handle multiline continuation
         if pending_key:
             if line.endswith("\\"):
-                pending_value += "\n " + line.rstrip("\\").strip()
+                pending_value += "\n" + line.rstrip("\\").strip()
                 continue
             else:
-                pending_value += "\n " + line.strip()
+                pending_value += "\n" + line.strip()
                 # Finalize the pending value
                 if current_register and (not got_register_description or not got_register_name):
                     config_data[current_section][current_module]["regs"][current_register][pending_key] = pending_value.strip()

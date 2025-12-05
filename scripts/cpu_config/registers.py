@@ -325,7 +325,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"{submodule_indent}{indent}- Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
-                        formatted_desc += f"\n{submodule_indent}{indent}              {line}"
+                        formatted_desc += f"\n{submodule_indent}{indent}               {line}"
                     lines.append(formatted_desc)
 
                 # Register metadata
@@ -346,7 +346,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                             desc_lines = reg_desc_str.split('\n')
                             formatted_desc = f"{submodule_indent}{indent}- Description: {desc_lines[0]}"
                             for line in desc_lines[1:]:
-                                formatted_desc += f"\n{submodule_indent}{indent}              {line}"
+                                formatted_desc += f"\n{submodule_indent}{indent}               {line}"
                             lines.append(formatted_desc)
                         if reg_perm_str:
                             lines.append(f"{submodule_indent}                - Permissions: {reg_perm_str}")
@@ -369,7 +369,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                                 desc_lines = fdesc.split('\n')
                                 formatted_desc = f"{submodule_indent}                    - Description: {desc_lines[0]}"
                                 for line in desc_lines[1:]:
-                                    formatted_desc += f"\n{submodule_indent}                                  {line}"
+                                    formatted_desc += f"\n{submodule_indent}                                   {line}"
                                 lines.append(formatted_desc)
 
     output = "\n".join(lines)
