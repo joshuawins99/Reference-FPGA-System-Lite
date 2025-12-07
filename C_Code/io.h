@@ -27,6 +27,7 @@ typedef struct {
 
 typedef struct {
     char commands[MAX_CMD_QUEUE][MAX_LINE_LENGTH];
+    slen_t slice_lengths[MAX_CMD_QUEUE];
     uint8_t head;
     uint8_t tail;
 } CommandQueue;
@@ -34,7 +35,7 @@ typedef struct {
 uint8_t isQueueFull();
 uint8_t isQueueEmpty();
 void enqueueCommand(const SliceU8);
-char* dequeueCommand();
+SliceU8 dequeueCommand();
 void executeQueuedCommands();
 void printQueuedCommands();
 void Print (uint8_t, const char *);

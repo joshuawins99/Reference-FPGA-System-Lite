@@ -19,30 +19,30 @@ void enqueueCommand(SliceU8 data) {
             cmdQueue.commands[cmdQueue.tail][i] = data.ptr[i];
             ++i;
         }
+        cmdQueue.slice_lengths[cmdQueue.tail] = data.len;
         cmdQueue.commands[cmdQueue.tail][i] = '\0';
 
         ++cmdQueue.tail;
     }
 }
 
-char* dequeueCommand() {
-    char *cmd;
-
+SliceU8 dequeueCommand() {
+    uint8_t idx = cmdQueue.head;
+    
     if (!isQueueEmpty()) {
-        cmd = cmdQueue.commands[cmdQueue.head];
         ++cmdQueue.head;
-        return cmd;
+        return slice_range((unsigned char *)cmdQueue.commands[idx], 0, cmdQueue.slice_lengths[idx]);
     }
-    return NULL;
+    return cstr_to_slice(NULL);
 }
 
 void executeQueuedCommands() {
-    char *cmd;
+    SliceU8 cmd;
     SliceU8 result;
 
     while (!isQueueEmpty()) {
         cmd = dequeueCommand();
-        result = executeCommandsSerial(cstr_to_slice(cmd));
+        result = executeCommandsSerial(cmd);
         if (result.ptr != NULL && result.len > 0) {
             PrintSlice(1, result);
         }
@@ -66,7 +66,7 @@ void printQueuedCommands() {
         str_cat(label, ": "); // append ": " to the end
 
         Print(0, label);
-        Print(1, cmdQueue.commands[i]);
+        PrintSlice(1, slice_range((unsigned char *)cmdQueue.commands[i], 0, cmdQueue.slice_lengths[i]));
     }
 }
 
