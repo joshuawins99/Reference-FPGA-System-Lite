@@ -22,7 +22,8 @@ def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, re
         module_storage = []
 
         # Zig Header Boilerplate
-        zig_lines.append("""
+        zig_lines.append("""\
+// Auto-generated register map header
 pub const CompactRegisterBlock = struct {
     base: usize,
     count: usize,
@@ -119,7 +120,7 @@ pub const Register = struct {
             py_lines.append("            raise IndexError(f'Register index {index} out of bounds (max {self.count - 1})')")
             py_lines.append("        return self.base + index * self.address_wording\n")
         else:
-            py_lines.append("""
+            py_lines.append("""\
 # Auto-generated register map header
 from enum import Enum
 
@@ -472,7 +473,7 @@ class FPGAInterface:
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"// Module Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
-                        formatted_desc += f"\n//                    {line}"
+                        formatted_desc += f"\n//                     {line}"
                     c_lines.append(formatted_desc)
                     zig_lines.append(formatted_desc)
                 temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
@@ -480,7 +481,7 @@ class FPGAInterface:
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"# Module Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
-                        formatted_desc += f"\n#                    {line}"
+                        formatted_desc += f"\n#                     {line}"
                     temp_module_storage.append(formatted_desc)
 
                 enum_name = f"{module_id}_REG"
@@ -497,7 +498,15 @@ class FPGAInterface:
                 if (mod_reg_expand_str == 'FALSE'):
                     if new_c_header:
                         c_addr_macros.append(f"enum {{")
-                    zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", ""): #Make submodules private
+                        zig_lines.append(f"const {module_id.lower()} = struct {{")
+                    else:
+                        zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    for idx, entry in enumerate(current_submodule_map):
+                        if entry.module_parent == module_name:
+                            full_submodule_name = entry.module_name
+                            sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                            zig_lines.append(f"    pub const {sub_module} = {full_submodule_name};")
                     zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
                     for i in range(reg_count-subregisters):
                         addr = start_addr + i * reg_width_bytes
@@ -539,9 +548,9 @@ class FPGAInterface:
                         else:
                             reg_perm_zig = "ReadWrite"
                         if i < (reg_count-subregisters)-1:
-                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig}}};")
+                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
                         else:
-                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig}}};")
+                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
                             zig_lines.append(f"}};")
                         # Python enum entry
                         if not new_python_header:
