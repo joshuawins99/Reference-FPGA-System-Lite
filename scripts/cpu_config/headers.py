@@ -89,6 +89,9 @@ pub const Register = struct {
 
         # C Header Boilerplate
         c_lines.append("// Auto-generated register map header")
+        if new_c_header:
+            c_lines.append(f"#ifndef {cpu_name.upper()}_H")
+            c_lines.append(f"#define {cpu_name.upper()}_H")
         c_lines.append("#pragma once\n")
         c_lines.append("#include <stdint.h>\n")
         c_lines.append("typedef struct {")
@@ -537,7 +540,7 @@ class FPGAInterface:
                                 c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i},")
                             else:
                                 c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i}")
-                                c_addr_macros.append(f"}} {module_id}_REGISTERS_E;")
+                                c_addr_macros.append(f"}};")
                         if reg_perm:
                             if reg_perm == "R":
                                 reg_perm_zig = "ReadOnly"
@@ -661,7 +664,10 @@ class FPGAInterface:
                     if not(any(x.module_name == module_name for x in current_submodule_map)):
                         temp_module_storage.append(f"FPGAInterface.{module_id.lower()} = _{module_id.lower()}")
                     module_storage[0:0] = temp_module_storage
-
+        
+        if new_c_header:
+            c_lines.append("#endif")
+        
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
         print(f"C header for {cpu_name} saved to: {c_filename}")
@@ -673,6 +679,7 @@ class FPGAInterface:
 
         for entry in module_storage:
             py_lines.append(entry)
+
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
         print(f"Python header for {cpu_name} saved to: {py_filename}\n")
