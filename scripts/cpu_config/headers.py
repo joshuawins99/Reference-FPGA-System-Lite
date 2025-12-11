@@ -575,7 +575,7 @@ class FPGAInterface:
                         add_reg_comma = ","
                         if (i == (reg_count-subregisters)-1):
                             add_reg_comma = ""
-                        temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i * reg_width_bytes} }}{add_reg_comma}")
+                        temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i} }}{add_reg_comma}")
 
                         # C enum entry
                         comma = "," if i < (reg_count-subregisters) - 1 else ""
