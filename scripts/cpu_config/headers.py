@@ -17,6 +17,8 @@ def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, re
         py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
 
         c_lines = []
+        c_module_storage = []
+        c_lines_storage = []
         py_lines = []
         zig_lines = []
         module_storage = []
@@ -88,26 +90,63 @@ pub const Register = struct {
 """)
 
         # C Header Boilerplate
-        c_lines.append("// Auto-generated register map header")
-        if new_c_header:
-            c_lines.append(f"#ifndef {cpu_name.upper()}_H")
-            c_lines.append(f"#define {cpu_name.upper()}_H")
-        c_lines.append("#pragma once\n")
-        c_lines.append("#include <stdint.h>\n")
-        c_lines.append("typedef struct {")
-        c_lines.append("    uintptr_t base;")
-        c_lines.append("    size_t count;")
-        c_lines.append("    size_t address_wording;")
-        c_lines.append("} CompactRegisterBlock;\n")
-        if new_c_header:
-            c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))")
-            c_lines.append("#define REG_NAME(mod, reg) mod##_##reg")
-            c_lines.append("#define WRITE32(mod, reg, val) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
-            c_lines.append("#define READ32(mod, reg) (*(volatile uint32_t*)REG_AT(mod, REG_NAME(mod, reg)))")
-            c_lines.append("#define WRITE8(mod, reg, val) (*(volatile unsigned char*)REG_AT(mod, REG_NAME(mod, reg)) = (val))")
-            c_lines.append("#define READ8(mod, reg) (*(volatile unsigned char*)REG_AT(mod, REG_NAME(mod, reg)))\n")
-        else:
+        if not new_c_header:
+            c_lines.append("// Auto-generated register map header")
+            c_lines.append("#pragma once\n")
+            c_lines.append("#include <stdint.h>")
+            c_lines.append("#include <stddef.h>\n")
+            c_lines.append("typedef struct {")
+            c_lines.append("    uintptr_t base;")
+            c_lines.append("    size_t count;")
+            c_lines.append("    size_t address_wording;")
+            c_lines.append("} CompactRegisterBlock;\n")
             c_lines.append("#define REG_AT(block, index) ((uintptr_t)((block).base + (index) * (block).address_wording))\n")
+        else:
+            c_lines.append(f"""
+#ifndef {cpu_name.upper()}_H
+#define {cpu_name.upper()}_H                         
+#include <stdint.h>
+
+typedef struct {{
+    uintptr_t base;
+    size_t count;
+    size_t address_wording;
+}} CompactRegisterBlock;
+
+typedef struct {{
+    CompactRegisterBlock block;
+    size_t offset;
+}} Register;
+
+static inline uintptr_t RegAt(CompactRegisterBlock blk, size_t index) {{
+    return blk.base + index * blk.address_wording;
+}}
+
+static inline uintptr_t RegAddr(Register reg) {{
+    return RegAt(reg.block, reg.offset);
+}}
+
+static inline void Write32(Register reg, uint32_t val) {{
+    volatile uint32_t *ptr = (volatile uint32_t *)RegAddr(reg);
+    *ptr = val;
+}}
+
+static inline uint32_t Read32(Register reg) {{
+    volatile uint32_t *ptr = (volatile uint32_t *)RegAddr(reg);
+    return *ptr;
+}}
+
+static inline void Write8(Register reg, uint8_t val) {{
+    volatile uint8_t *ptr = (volatile uint8_t *)RegAddr(reg);
+    *ptr = val;
+}}
+
+static inline uint8_t Read8(Register reg) {{
+    volatile uint8_t *ptr = (volatile uint8_t *)RegAddr(reg);
+    return *ptr;
+}}
+                          
+""")
 
         # Python Header Boilerplate
         if not new_python_header:
@@ -439,6 +478,7 @@ class FPGAInterface:
         """)
             
         temp_module_storage = []
+        temp_c_storage = []
 
         # Parameter Table
         parameter_table = build_parameter_table(cpu_config)
@@ -470,14 +510,18 @@ class FPGAInterface:
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
 
                 # === Module Documentation ===
-                c_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                if not new_c_header:
+                    c_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                c_lines_storage.append(f"// Module: {mod_name_str} ({module_name})")
                 zig_lines.append(f"// Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"// Module Description: {desc_lines[0]}"
                     for line in desc_lines[1:]:
                         formatted_desc += f"\n//                     {line}"
-                    c_lines.append(formatted_desc)
+                    if not new_c_header:
+                        c_lines.append(formatted_desc)
+                    c_lines_storage.append(formatted_desc)
                     zig_lines.append(formatted_desc)
                 temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
@@ -499,8 +543,6 @@ class FPGAInterface:
                 py_addr_lines = []
 
                 if (mod_reg_expand_str == 'FALSE'):
-                    if new_c_header:
-                        c_addr_macros.append(f"enum {{")
                     if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", ""): #Make submodules private
                         zig_lines.append(f"const {module_id.lower()} = struct {{")
                     else:
@@ -522,13 +564,27 @@ class FPGAInterface:
                         entry_name = f"{module_id}_{reg_name_id}"
                         reg_perm_zig = ""
 
+                        if new_c_header and i == 0:
+                            c_lines_storage.append(f"typedef struct {{")
+                            c_lines_storage.append(f"   CompactRegisterBlock block;")
+                            for idx, entry in enumerate(current_submodule_map):
+                                    if entry.module_parent == module_name:
+                                        full_submodule_name = entry.module_name
+                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                                        c_lines_storage.append(f"    {full_submodule_name}_t {sub_module};")
+                        add_reg_comma = ","
+                        if (i == (reg_count-subregisters)-1):
+                            add_reg_comma = ""
+                        temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i * reg_width_bytes} }}{add_reg_comma}")
+
                         # C enum entry
                         comma = "," if i < (reg_count-subregisters) - 1 else ""
+                        if reg_desc:
+                            desc_lines = reg_desc.split('\n')
                         if not new_c_header:
                             c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
                             c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
                             if reg_desc:
-                                desc_lines = reg_desc.split('\n')
                                 formatted_desc = f"// Register Description: {desc_lines[0]}"
                                 for line in desc_lines[1:]:
                                     formatted_desc += f"\n//                      {line}"
@@ -537,10 +593,17 @@ class FPGAInterface:
                                 c_addr_macros.append(f"// Register Permissions: {reg_perm}")
                         else:
                             if i < (reg_count-subregisters)-1:
-                                c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i},")
+                                c_lines_storage.append(f"   Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
                             else:
-                                c_addr_macros.append(f"    {module_id}_{reg_name_id} = {i}")
-                                c_addr_macros.append(f"}};")
+                                c_lines_storage.append(f"   Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                                c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
+                                c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
+                                c_lines_storage.append(f"    .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }},")
+                                for idx, entry in enumerate(current_submodule_map):
+                                    if entry.module_parent == module_name:
+                                        full_submodule_name = entry.module_name
+                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                                        c_lines_storage.append(f"    .{sub_module} = {full_submodule_name},")
                         if reg_perm:
                             if reg_perm == "R":
                                 reg_perm_zig = "ReadOnly"
@@ -572,12 +635,26 @@ class FPGAInterface:
                     zig_lines.append(f"pub const {module_id.lower()} = struct {{")
                     zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
                     zig_lines.append(f" }};")
+                    c_lines_storage.append(f"typedef struct {{")
+                    c_lines_storage.append(f"   CompactRegisterBlock block;")
+                    c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
+                    c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
+                    c_lines_storage.append(f"   .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }}")
+                    c_lines_storage.append(f"}};\n")
+                
+                c_lines_storage.extend(temp_c_storage)
+                if temp_c_storage:
+                    c_lines_storage.append(f"}};\n")
+                c_module_storage[0:0] = c_lines_storage
+                c_lines_storage = []
+                temp_c_storage = []
+
                 #c_lines.append(f"typedef enum {{")
                 #c_lines.extend(c_enum_entries)
                 #c_lines.append(f"}} {enum_name};\n")
-                c_lines.extend(c_addr_macros)
-                c_lines.append(f"static const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
-
+                if not new_c_header:
+                    c_lines.extend(c_addr_macros)
+                    c_lines.append(f"static const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
                 #py_lines.extend(py_enum_entries)
                 py_lines.extend(py_addr_lines)
                 if not new_python_header:
@@ -666,6 +743,8 @@ class FPGAInterface:
                     module_storage[0:0] = temp_module_storage
         
         if new_c_header:
+            for entry in c_module_storage:
+                c_lines.append(entry)
             c_lines.append("#endif")
         
         with open(c_filename, "w") as f:

@@ -100,7 +100,7 @@ void PrintSlice(uint8_t line, const SliceU8 data) {
 }
 
 SliceU8 ReadVersion() {
-    static char readversion[VersionStringSize+1];
+    static char readversion[VersionStringSize];
     char current_char;
     uint8_t count = 0;
     uint8_t i;
@@ -243,7 +243,7 @@ void ReadUART() {
         if (readuart[char_iter] != '\n') {
             ++char_iter;
         } else {
-            UARTCommand(slice_range_safe((uint8_t *)readuart, MAX_LINE_LENGTH, 0, char_iter));
+            UARTCommand(slice_range((uint8_t *)readuart, 0, char_iter));
             char_iter = 0;
         }
     }
