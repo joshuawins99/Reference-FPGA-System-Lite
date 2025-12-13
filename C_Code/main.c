@@ -1,6 +1,5 @@
 #include "fpga_cpu.h"
-#include "utility.c"
-#include "io.c"
+#include "io.h"
 
 void loop() {
     while (1) {
@@ -9,6 +8,9 @@ void loop() {
 }
 
 int main () {
+#ifdef REPL_UART
+    Print(1, "Ref FPGA Sys Lite REPL:");
+#endif
     loop();
     return 0;
 }

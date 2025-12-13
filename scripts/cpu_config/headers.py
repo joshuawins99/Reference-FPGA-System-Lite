@@ -106,6 +106,7 @@ pub const Register = struct {
 #ifndef {cpu_name.upper()}_H
 #define {cpu_name.upper()}_H                         
 #include <stdint.h>
+#include <stddef.h>
 
 typedef struct {{
     uintptr_t base;
@@ -566,7 +567,7 @@ class FPGAInterface:
 
                         if new_c_header and i == 0:
                             c_lines_storage.append(f"typedef struct {{")
-                            c_lines_storage.append(f"   CompactRegisterBlock block;")
+                            c_lines_storage.append(f"    CompactRegisterBlock block;")
                             for idx, entry in enumerate(current_submodule_map):
                                     if entry.module_parent == module_name:
                                         full_submodule_name = entry.module_name
@@ -593,9 +594,9 @@ class FPGAInterface:
                                 c_addr_macros.append(f"// Register Permissions: {reg_perm}")
                         else:
                             if i < (reg_count-subregisters)-1:
-                                c_lines_storage.append(f"   Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                                c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
                             else:
-                                c_lines_storage.append(f"   Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                                c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
                                 c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
                                 c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
                                 c_lines_storage.append(f"    .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }},")

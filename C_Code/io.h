@@ -1,3 +1,6 @@
+#ifndef IO_H
+#define IO_H
+
 #include "slice.h"
 #include "utility.h"
 #include "fpga_cpu.h"
@@ -46,3 +49,5 @@ void writeFPGA (uint32_t, uint32_t);
 SliceU8 executeCommandsSerial(SliceU8);
 void UARTCommand(SliceU8);
 void ReadUART();
+
+#endif

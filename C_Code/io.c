@@ -1,4 +1,5 @@
 #include "io.h"
+#include "utility.h"
 
 static CommandQueue cmdQueue = { .head = 0, .tail = 0 };
 static uint8_t queueMode = 0; // 0 = immediate, 1 = queue mode
@@ -70,6 +71,17 @@ void printQueuedCommands() {
     }
 }
 
+char get_char() {
+    while (ReadIO(UART_CPU_BaseAddress+(4*ADDR_WORD)) != 0);
+    return ReadIO(UART_CPU_BaseAddress+(3*ADDR_WORD));
+}
+
+void put_char(uint8_t c) {
+    while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
+    WriteIO(UART_CPU_BaseAddress, (uint8_t)c);
+    WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+}
+
 void Print(uint8_t line, const char *data) {
     while (*data) {
         while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0); // wait until UART not busy
@@ -77,6 +89,11 @@ void Print(uint8_t line, const char *data) {
         WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
     }
     if (line) {
+#ifdef CARRIAGE_RETURN
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
+        WriteIO(UART_CPU_BaseAddress, '\r');
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+#endif
         while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
         WriteIO(UART_CPU_BaseAddress, '\n');
         WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
@@ -93,6 +110,11 @@ void PrintSlice(uint8_t line, const SliceU8 data) {
         WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
     }
     if (line) {
+#ifdef CARRIAGE_RETURN
+        while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
+        WriteIO(UART_CPU_BaseAddress, '\r');
+        WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
+#endif
         while (ReadIO(UART_CPU_BaseAddress+(2*ADDR_WORD)) != 0);
         WriteIO(UART_CPU_BaseAddress, '\n');
         WriteIO(UART_CPU_BaseAddress+(1*ADDR_WORD), 1);
@@ -234,17 +256,49 @@ void UARTCommand (SliceU8 data) {
     }
 }
 
-void ReadUART() {
-    static uint8_t char_iter;
-    static char readuart[MAX_LINE_LENGTH];
+//Incoming UART Line Buffer and Index
+static uint8_t char_iter;
+static char readuart[MAX_LINE_LENGTH];
 
-    if (ReadIO(UART_CPU_BaseAddress+(4*ADDR_WORD)) == 0) {
-        readuart[char_iter] = (char) ReadIO(UART_CPU_BaseAddress+(3*ADDR_WORD));
-        if (readuart[char_iter] != '\n') {
-            ++char_iter;
+#ifdef REPL_UART
+void read_line() {
+    char c;
+    
+    char_iter = 0;
+    while ((c = get_char()) != '\n' && c != '\r' && char_iter < MAX_LINE_LENGTH - 1) {
+        if (c == 8 || c == 127) { //Backspace or DEL
+            if (char_iter > 0) {
+                char_iter--;
+                Print(0, "\b \b");
+            }
         } else {
-            UARTCommand(slice_range((uint8_t *)readuart, 0, char_iter));
-            char_iter = 0;
+            readuart[char_iter++] = c;
+            put_char(c);
         }
     }
+#ifndef CARRIAGE_RETURN
+    put_char('\n');
+#else
+    Print(0, "\r\n");
+#endif
+}
+#endif
+
+void ReadUART() {
+#ifndef REPL_UART
+    char c;
+
+    c = get_char();
+    if (c != '\n') {
+        readuart[char_iter] = c;
+        ++char_iter;
+    } else {
+        UARTCommand(slice_range((uint8_t *)readuart, 0, char_iter));
+        char_iter = 0;
+    }
+#else
+    Print(0, "> ");
+    read_line();
+    UARTCommand(slice_range((uint8_t *)readuart, 0, char_iter));
+#endif
 }
