@@ -33,6 +33,7 @@ ls
 cpu_test ref_fpga_sys_lite.sv generate_cpu_instance.py
 ```
 
+### Config Creation
 Now create a config file named cpu_config.txt and place it in the cpu_test folder. It follows this format:
 ```
 #CPU Config File
@@ -169,6 +170,16 @@ USER_MODULES:
                         Module_Include : {REF_PATH}/rtl/timer_cpu.sv
 ```
 
+***As of Version 3.16.0*** There is a 'Repeat' keyword. This allows for multiple instances of an entry. Subsequent repeats will get an _{iterator} appended to their name. The number can either be a literal or an {expression}.
+```
+USER_MODULES:
+    pwm_e : TRUE : AUTO
+        Repeat : 2
+        Module_Include : {REF_PATH}/rtl/pwm_generator.sv
+```
+In this example, pwm_e, pwm_e_1, and pwm_e_2 will be added.
+
+### System Generation
 Run the python script to generate the module and package file:
 ```bash
 python3 generate_cpu_instance.py
@@ -188,6 +199,7 @@ Below are the list of flags as part of generate_cpu_instance.py:
     --gen-headers          -> generates C and Python headers for use in a program 
     --configs-path         -> specify base folder that the script should look for config folders
 
+### RTL Instantiation Usage
 An example instantiation of the module is as follows. The package name will be {folder name}_package, the top level instantiation will be {folder name}_top, and the interface will be {folder name}_bus_rv32: (Refer to the [Integrated CDC Module](#integrated-cdc-module) section for the most up to date way of instantiation. The method shown here also is still supported.)
 ```Verilog
 import cpu_test_package::*;
@@ -225,6 +237,7 @@ A few parameters in the config file have to be configured to the specific projec
 
 Also take note of the BaudRateCPU parameter. This is the baud rate the UART is configured to run at. The default configuration is 230400 Baud, 1 Stop Bit, and no parity bit.
 
+### Python Scripting Example
 Using the python functions below, try to read the FPGA Version String. Expected output should resemble this:
 ```Python
 import serial

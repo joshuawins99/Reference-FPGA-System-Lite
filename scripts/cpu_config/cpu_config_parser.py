@@ -168,6 +168,7 @@ def parse_config(file_path):
     reg_re = re.compile(r"(Reg\d+)\s*:")
     field_re = re.compile(r"(Field\d+)\s*:")
     name_re = re.compile(r"Name\s*:\s*(.+)")
+    repeat_re = re.compile(r"Repeat\s*:\s*(.+)")
     desc_re = re.compile(r"Description\s*:\s*(.+)")
     bounds_re =  re.compile(r"Bounds\s*:\s*\[\s*([^\]:]+)\s*:\s*([^\]]+)\s*\]")
     permissions_re = re.compile(r"Permissions\s*:\s*(.+)")
@@ -219,6 +220,7 @@ def parse_config(file_path):
         field_match = field_re.match(line)
         bounds_match = bounds_re.match(line)
         name_match = name_re.match(line)
+        repeat_match = repeat_re.match(line)
         desc_match = desc_re.match(line)
         permissions_match = permissions_re.match(line)
         module_include_match = module_include_re.match(line)
@@ -507,6 +509,18 @@ def parse_config(file_path):
                     got_module_name = True
                     config_data[current_section][current_module]["metadata"]["name"] = name_val
 
+        elif current_module and repeat_match:
+            repeat_val = repeat_match.group(1)
+
+            #remove braces if present
+            if repeat_val.startswith("{") and repeat_val.endswith("}"):
+                repeat_val = repeat_val[1:-1]
+
+            if not (got_register_name or got_register_description):
+                config_data[current_section][current_module]["repeat"] = repeat_val
+            else:
+                raise SyntaxError(f"Repeat value not correct in Entry: '{current_module}'")
+
         elif current_module and desc_match:
             desc_val = desc_match.group(1)
             if desc_val.endswith("\\"):
@@ -551,6 +565,23 @@ def parse_config(file_path):
 
     #Build a map of submodules to add to base module recursively
     parameters_list = build_parameter_table(config_data)
+
+    #Account for Repeat entries in modules
+    for section, section_data in config_data.items():
+        if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+            new_section_data = {}
+            for module, module_data in list(section_data.items()):
+                new_section_data[module] = module_data
+                if module_data.get("repeat",{}):
+                    try:
+                        repeat_count = int(resolve_expression(module_data.pop("repeat", {}), parameters_list))
+                    except:
+                        raise SyntaxError(f"Repeat value not correct in Entry: '{module}'")
+                    for i in range(1, repeat_count+1):
+                        new_key = f"{module}_{i}"
+                        new_section_data[new_key] = module_data.copy()
+            config_data[section] = new_section_data
+
     #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
     submodule_reg_add_map_tuple = namedtuple("submodule_reg_add_map_tuple", ["base_module", "section", "module_name", "module_parent", "register_count", "id_count", "separator"])
     submodule_reg_add_map = []

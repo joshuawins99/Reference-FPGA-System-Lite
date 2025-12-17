@@ -274,8 +274,9 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
         section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
         for section in section_list:
-            lines.append("")
-            lines.append(f"    Section: {section}")
+            if cpu_config.get(section, {}).items(): # Dont print USER_MODULES section if none are present
+                lines.append("")
+                lines.append(f"    Section: {section}")
 
             for module_name, module in cpu_config.get(section, {}).items():
                 module_name_orig = module_name
