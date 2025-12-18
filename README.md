@@ -395,7 +395,7 @@ For tools like Quartus which do a poor job of resolving drivers, a cdc_bypass_ma
 
 ## Integrated CDC Module
 ***As of Version 3.10.0***
-An option to have an integrated cdc module is supported. This essentially wraps the cpu and cdc instance into one module to make the instantiation cleaner. With the bypass_config_t type, a localparam is made to define the modules and if they should use the cdc synchronization or not. Passthrough mode is enabled when cdc bypass is set to 1 for a given module. This new module is the preferred way to use this system since everything is integreated into a single package. Using the previous method of instantiation is still supported though.
+An option to have an integrated cdc module is supported. This essentially wraps the cpu and cdc instance into one module to make the instantiation cleaner. With the bypass_config_t type, a localparam is made to define the modules and if they should use the cdc synchronization or not. Passthrough mode is enabled when cdc bypass is set to 1 for a given module. This new module is the preferred way to use this system since everything is integreated into a single package. Using the previous method of instantiation is still supported though. The default is an entry that is bypassed and doesnt require a busy (1, 0). Modules that fit this type do not require an entry.
 ```Verilog
 import cpu_test_package::*;
 module cpu_with_cdc_test (

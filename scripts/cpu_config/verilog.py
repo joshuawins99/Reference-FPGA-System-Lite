@@ -120,61 +120,115 @@ package {package_name};
 
     typedef logic [data_width-1:0] data_reg_inputs_t [0:num_entries-1];
 
-    localparam int num_entries_width = $clog2(num_entries) + 2;
+    localparam int num_entries_bit_width = $clog2(num_entries);
+    localparam int num_entries_mask_width = num_entries_bit_width + 3;
 
-    function logic [num_entries_width-1:0] add_cdc_entry (
+    typedef enum int {{
+        cdc_index_lsb      = 0,
+        cdc_index_msb      = num_entries_bit_width-1,
+        cdc_bypass_en_bit  = num_entries_bit_width,
+        cdc_busy_en_bit    = num_entries_bit_width+1,
+        cdc_valid_bit      = num_entries_bit_width+2
+    }} cdc_entry_field_e;
+
+    typedef logic [num_entries_mask_width*(num_entries-last_enabled_builtin_module)-1:0] bypass_config_t;
+
+    function logic [num_entries_mask_width-1:0] add_cdc_entry (
         input logic [$clog2(num_entries)-1:0] index,
         input logic bypass_en,
         input logic busy_en
     );
-        logic [num_entries_width-1:0] result;
-        result[$clog2(num_entries)-1:0] = index;
-        result[$clog2(num_entries)]     = bypass_en;
-        result[num_entries_width-1]     = busy_en;
+        logic [num_entries_mask_width-1:0] result;
+
+        result[cdc_index_msb:cdc_index_lsb] = index;
+        result[cdc_bypass_en_bit]           = bypass_en;
+        result[cdc_busy_en_bit]             = busy_en;
+        result[cdc_valid_bit]               = 1'b1;
+
         return result;
     endfunction
 
-    typedef logic [num_entries_width*(num_entries-last_enabled_builtin_module)-1:0] bypass_config_t;
-
-    function logic [num_entries-1:0] build_bypass_mask(
-        input bypass_config_t bypass_config
+    function logic [num_entries-1:0] build_bypass_mask_default(
+        input bypass_config_t bypass_config,
+        input logic bypass_default
     );
         logic [num_entries-1:0] mask;
+        logic [num_entries-1:0] visited;
+
         mask = {{num_entries{{1'b1}}}};
+        visited = '0;
 
         for (int i = last_enabled_builtin_module; i < num_entries; i++) begin
             int entry_idx;
             logic [$clog2(num_entries)-1:0] index;
             logic bypass_en;
-            entry_idx = i - last_enabled_builtin_module;
-            index     = bypass_config[entry_idx*num_entries_width +: $clog2(num_entries)];
-            bypass_en = bypass_config[entry_idx*num_entries_width + $clog2(num_entries)];
+            logic valid_ident;
 
-            mask[index] = bypass_en;
+            entry_idx     = i - last_enabled_builtin_module;
+            index         = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
+            bypass_en     = bypass_config[entry_idx*num_entries_mask_width + cdc_bypass_en_bit];
+            valid_ident   = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
+            
+            if (valid_ident == 1'b1) begin
+                mask[index] = bypass_en;
+                visited[index] = 1'b1;
+            end else begin
+                if (visited[i] == 1'b0) begin
+                    mask[i] = bypass_default;
+                    visited[i] = 1'b1;
+                end
+            end
         end
 
         return mask;
     endfunction
 
-    function logic [num_entries-1:0] build_busy_mask(
-        input bypass_config_t bypass_config
+    function logic [num_entries-1:0] build_busy_mask_default(
+        input bypass_config_t bypass_config,
+        input logic busy_default
     );
         logic [num_entries-1:0] mask;
+        logic [num_entries-1:0] visited;
+
         mask = '0;
+        visited = '0;
 
         for (int i = last_enabled_builtin_module; i < num_entries; i++) begin
             int entry_idx;
             logic [$clog2(num_entries)-1:0] index;
             logic busy_en;
-            entry_idx = i - last_enabled_builtin_module;
-            index    = bypass_config[entry_idx*num_entries_width +: $clog2(num_entries)];
-            busy_en  = bypass_config[entry_idx*num_entries_width + $clog2(num_entries) + 1];
+            logic valid_ident;
 
-            mask[index] = busy_en;
+            entry_idx     = i - last_enabled_builtin_module;
+            index         = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
+            busy_en       = bypass_config[entry_idx*num_entries_mask_width + cdc_busy_en_bit];
+            valid_ident   = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
+
+            if (valid_ident == 1'b1) begin
+                mask[index] = busy_en;
+                visited[index] = 1'b1;
+            end else begin
+                if (visited[i] == 1'b0) begin
+                    mask[i] = busy_default;
+                    visited[i] = 1'b1;
+                end
+            end
         end
 
         return mask;
     endfunction
+
+    function logic [num_entries-1:0] build_bypass_mask(
+        input bypass_config_t bypass_config
+    );
+        return build_bypass_mask_default(bypass_config, 1'b1); //Bypass by default
+    endfunction 
+
+    function logic [num_entries-1:0] build_busy_mask(
+        input bypass_config_t bypass_config
+    );
+        return build_busy_mask_default(bypass_config, 1'b0); //No busy by default
+    endfunction 
 
 endpackage
     """
