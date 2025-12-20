@@ -170,7 +170,7 @@ USER_MODULES:
                         Module_Include : {REF_PATH}/rtl/timer_cpu.sv
 ```
 
-***As of Version 3.16.0*** There is a 'Repeat' keyword. This allows for multiple instances of an entry. Subsequent repeats will get an _{iterator} appended to their name. The number can either be a literal or an {expression}.
+***As of Version 3.16.0*** There is a 'Repeat' keyword. This allows for multiple instances of an entry. Subsequent repeats will get an _{iterator} appended to their name. The number can either be a literal or an {expression}. The Repeat line can also optionally have NOEXPREGS so that the contents of each instance aren't repeated and only the original one is.
 ```
 USER_MODULES:
     pwm_e : TRUE : AUTO

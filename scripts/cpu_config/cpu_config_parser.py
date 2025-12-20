@@ -2,6 +2,7 @@ import os
 import re
 from registers import reorder_tree, resolve_expression, build_parameter_table
 from collections import namedtuple
+import copy
 
 def get_c_code_folders(parsed_configs):
     """Extracts C_CODE_FOLDER values from the parsed configs if present."""
@@ -168,7 +169,7 @@ def parse_config(file_path):
     reg_re = re.compile(r"(Reg\d+)\s*:")
     field_re = re.compile(r"(Field\d+)\s*:")
     name_re = re.compile(r"Name\s*:\s*(.+)")
-    repeat_re = re.compile(r"Repeat\s*:\s*(.+)")
+    repeat_re = re.compile(r"Repeat\s*:\s*(\d+|\{[^}]+\})(?:\s*:\s*(\w+))?")
     desc_re = re.compile(r"Description\s*:\s*(.+)")
     bounds_re =  re.compile(r"Bounds\s*:\s*\[\s*([^\]:]+)\s*:\s*([^\]]+)\s*\]")
     permissions_re = re.compile(r"Permissions\s*:\s*(.+)")
@@ -511,13 +512,22 @@ def parse_config(file_path):
 
         elif current_module and repeat_match:
             repeat_val = repeat_match.group(1)
+            expand_regs = repeat_match.group(2)
 
             #remove braces if present
             if repeat_val.startswith("{") and repeat_val.endswith("}"):
                 repeat_val = repeat_val[1:-1]
 
             if not (got_register_name or got_register_description):
-                config_data[current_section][current_module]["repeat"] = repeat_val
+                config_data[current_section][current_module].setdefault("repeat", {})
+                config_data[current_section][current_module]["repeat"]["value"] = repeat_val
+            else:
+                raise SyntaxError(f"Repeat value not correct in Entry: '{current_module}'")
+            
+            if expand_regs == "NOEXPREGS":
+                config_data[current_section][current_module]["repeat"]["expand_regs"] = 'TRUE'
+            elif not expand_regs:
+                config_data[current_section][current_module]["repeat"]["expand_regs"] = 'FALSE'
             else:
                 raise SyntaxError(f"Repeat value not correct in Entry: '{current_module}'")
 
@@ -572,14 +582,17 @@ def parse_config(file_path):
             new_section_data = {}
             for module, module_data in list(section_data.items()):
                 new_section_data[module] = module_data
-                if module_data.get("repeat",{}):
+                repeat_info = module_data.get("repeat", {})
+                if repeat_info:
                     try:
-                        repeat_count = int(resolve_expression(module_data.pop("repeat", {}), parameters_list))
+                        repeat_val = repeat_info.get("value")
+                        repeat_count = int(resolve_expression(repeat_val, parameters_list))
                     except:
                         raise SyntaxError(f"Repeat value not correct in Entry: '{module}'")
                     for i in range(1, repeat_count+1):
                         new_key = f"{module}_{i}"
-                        new_section_data[new_key] = module_data.copy()
+                        new_section_data[new_key] = copy.deepcopy(module_data)
+                        new_section_data[new_key]["metadata"]["repeat_instance"] = 'TRUE'
             config_data[section] = new_section_data
 
     #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)

@@ -124,11 +124,11 @@ package {package_name};
     localparam int num_entries_mask_width = num_entries_bit_width + 3;
 
     typedef enum int {{
-        cdc_index_lsb      = 0,
-        cdc_index_msb      = num_entries_bit_width-1,
-        cdc_bypass_en_bit  = num_entries_bit_width,
-        cdc_busy_en_bit    = num_entries_bit_width+1,
-        cdc_valid_bit      = num_entries_bit_width+2
+        cdc_index_lsb     = 0,
+        cdc_index_msb     = num_entries_bit_width-1,
+        cdc_bypass_en_bit = num_entries_bit_width,
+        cdc_busy_en_bit   = num_entries_bit_width+1,
+        cdc_valid_bit     = num_entries_bit_width+2
     }} cdc_entry_field_e;
 
     typedef logic [num_entries_mask_width*(num_entries-last_enabled_builtin_module)-1:0] bypass_config_t;
@@ -148,7 +148,7 @@ package {package_name};
         return result;
     endfunction
 
-    function logic [num_entries-1:0] build_bypass_mask_default(
+    function logic [num_entries-1:0] build_bypass_mask_default (
         input bypass_config_t bypass_config,
         input logic bypass_default
     );
@@ -164,10 +164,10 @@ package {package_name};
             logic bypass_en;
             logic valid_ident;
 
-            entry_idx     = i - last_enabled_builtin_module;
-            index         = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
-            bypass_en     = bypass_config[entry_idx*num_entries_mask_width + cdc_bypass_en_bit];
-            valid_ident   = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
+            entry_idx   = i - last_enabled_builtin_module;
+            index       = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
+            bypass_en   = bypass_config[entry_idx*num_entries_mask_width + cdc_bypass_en_bit];
+            valid_ident = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
             
             if (valid_ident == 1'b1) begin
                 mask[index] = bypass_en;
@@ -183,7 +183,7 @@ package {package_name};
         return mask;
     endfunction
 
-    function logic [num_entries-1:0] build_busy_mask_default(
+    function logic [num_entries-1:0] build_busy_mask_default (
         input bypass_config_t bypass_config,
         input logic busy_default
     );
@@ -199,10 +199,10 @@ package {package_name};
             logic busy_en;
             logic valid_ident;
 
-            entry_idx     = i - last_enabled_builtin_module;
-            index         = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
-            busy_en       = bypass_config[entry_idx*num_entries_mask_width + cdc_busy_en_bit];
-            valid_ident   = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
+            entry_idx   = i - last_enabled_builtin_module;
+            index       = bypass_config[entry_idx*num_entries_mask_width +: ((cdc_index_msb-cdc_index_lsb)+1)];
+            busy_en     = bypass_config[entry_idx*num_entries_mask_width + cdc_busy_en_bit];
+            valid_ident = bypass_config[entry_idx*num_entries_mask_width + cdc_valid_bit];
 
             if (valid_ident == 1'b1) begin
                 mask[index] = busy_en;
@@ -218,13 +218,13 @@ package {package_name};
         return mask;
     endfunction
 
-    function logic [num_entries-1:0] build_bypass_mask(
+    function logic [num_entries-1:0] build_bypass_mask (
         input bypass_config_t bypass_config
     );
         return build_bypass_mask_default(bypass_config, 1'b1); //Bypass by default
     endfunction 
 
-    function logic [num_entries-1:0] build_busy_mask(
+    function logic [num_entries-1:0] build_busy_mask (
         input bypass_config_t bypass_config
     );
         return build_busy_mask_default(bypass_config, 1'b0); //No busy by default

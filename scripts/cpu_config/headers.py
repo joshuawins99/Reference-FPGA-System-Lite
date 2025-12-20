@@ -509,6 +509,8 @@ class FPGAInterface:
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "").strip()
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
+                mod_repeat_inst = mod_meta.get("repeat_instance", '')
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}})
 
                 # === Module Documentation ===
                 if not new_c_header:
@@ -543,7 +545,7 @@ class FPGAInterface:
                 py_enum_entries = []
                 py_addr_lines = []
 
-                if (mod_reg_expand_str == 'FALSE'):
+                if (mod_reg_expand_str == 'FALSE' or (mod_repeat_inst == 'TRUE' and mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
                     if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", ""): #Make submodules private
                         zig_lines.append(f"const {module_id.lower()} = struct {{")
                     else:
@@ -687,7 +689,7 @@ class FPGAInterface:
                     hidden_entry_prefix = "_"
                     #Normal Module Logic
                     register_defs = []
-                    if (mod_reg_expand_str == 'FALSE'):
+                    if (mod_reg_expand_str == 'FALSE' or (mod_repeat_inst == 'TRUE' and mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
                         field_defs = []
                         for i in range(reg_count):
                             reg_key = f"Reg{i}"

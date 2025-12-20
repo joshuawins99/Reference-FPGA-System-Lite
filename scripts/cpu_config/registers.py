@@ -313,6 +313,8 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "")
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
+                mod_repeat_inst = mod_meta.get("repeat_instance", {})
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}})
 
                 lines.append("")
                 if submodule_indent:
@@ -320,8 +322,9 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                 else:
                     lines.append(f"{submodule_indent}        -> Module: {mod_name_str} ({module_name})")
                 lines.append(f"{submodule_indent}            - Bounds: 0x{start_addr:04X} ({start_addr:0d}) to 0x{end_addr:04X} ({end_addr:0d})")
-                lines.append(f"{submodule_indent}            - Register Count: {reg_count}")
-                if mod_desc_str:
+                if mod_repeat_inst != 'TRUE' or (mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE'):
+                    lines.append(f"{submodule_indent}            - Register Count: {reg_count}")
+                if (mod_desc_str and not mod_repeat_inst) or (mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE' and mod_repeat_inst):
                     indent = " " * 12
                     desc_lines = mod_desc_str.split('\n')
                     formatted_desc = f"{submodule_indent}{indent}- Description: {desc_lines[0]}"
@@ -330,7 +333,7 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                     lines.append(formatted_desc)
 
                 # Register metadata
-                if (mod_reg_expand_str == 'FALSE'):
+                if ((mod_reg_expand_str == 'FALSE' and not mod_repeat_inst) or (mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
                     for i in range(reg_count-subregisters):
                         reg_addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
