@@ -494,7 +494,7 @@ class FPGAInterface:
                     continue
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
-                if  any(x.module_name == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
+                if any(x.module_name == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
                     continue
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
@@ -510,7 +510,18 @@ class FPGAInterface:
                 mod_desc_str = mod_meta.get("description", "").strip()
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
                 mod_repeat_inst = mod_meta.get("repeat_instance", '')
-                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}})
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}, "repeat_of": {}})
+
+                if "submodule_of" in module:
+                    for submodule in current_submodule_map:
+                        if submodule.module_name == module_name:
+                            base_module_reg_expand = submodule.base_reg_exp
+                            break
+                else:
+                    base_module_reg_expand = ""
+
+                if base_module_reg_expand == "TRUE":
+                    continue
 
                 # === Module Documentation ===
                 if not new_c_header:
@@ -670,7 +681,9 @@ class FPGAInterface:
                         current_module = ""
                         subblock_placed = False
                         for idx, entry in enumerate(current_submodule_map):
-                            if entry.module_parent == module_name:
+                            if entry.module_parent == module_name and cpu_config[entry.section][entry.module_name]["flag"] == 'TRUE':
+                                if entry.base_reg_exp == 'TRUE':
+                                    continue
                                 sub_module = str(entry.module_name.split(entry.separator)[-1])
                                 get_current_addr = module.get("bounds")
                                 get_sub_addr = cpu_config[entry.section][entry.module_name]["bounds"]

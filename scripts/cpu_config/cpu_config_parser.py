@@ -593,10 +593,11 @@ def parse_config(file_path):
                         new_key = f"{module}_{i}"
                         new_section_data[new_key] = copy.deepcopy(module_data)
                         new_section_data[new_key]["metadata"]["repeat_instance"] = 'TRUE'
+                        new_section_data[new_key]["repeat"]["repeat_of"] = module.split(submodule_identifier)[-1]
             config_data[section] = new_section_data
 
-    #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator)
-    submodule_reg_add_map_tuple = namedtuple("submodule_reg_add_map_tuple", ["base_module", "section", "module_name", "module_parent", "register_count", "id_count", "separator"])
+    #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator, base_reg_exp)
+    submodule_reg_add_map_tuple = namedtuple("submodule_reg_add_map_tuple", ["base_module", "section", "module_name", "module_parent", "register_count", "id_count", "separator", "base_reg_exp"])
     submodule_reg_add_map = []
     id_count = 0
     for section, data in config_data.items():
@@ -613,7 +614,8 @@ def parse_config(file_path):
                         raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
                     if submodule_data:
                         submodule_data = module.split(submodule_identifier)
-                        submodule_reg_add_map.append(submodule_reg_add_map_tuple(submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier))
+                        base_reg_exp = config_data[section][submodule_data[0]]["metadata"]["expand_regs"]
+                        submodule_reg_add_map.append(submodule_reg_add_map_tuple(submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier, base_reg_exp))
                         id_count +=1
 
     submodule_reg_add_map_sorted_key = {}
@@ -624,7 +626,7 @@ def parse_config(file_path):
     native_counts = {}
     children_map = {}
 
-    for _, section, full, parent, count, _, _ in submodule_reg_add_map_sorted:
+    for _, section, full, parent, count, _, _, _ in submodule_reg_add_map_sorted:
         # record native count for this module (from tuples)
         native_counts[full] = count
 
@@ -638,7 +640,7 @@ def parse_config(file_path):
     # IMPORTANT: use the base's already-initialized registers as its native count
     # registers is a string; convert to int
 
-    for base, section, _, _, _, _, _ in submodule_reg_add_map_sorted:
+    for base, section, _, _, _, _, _, _ in submodule_reg_add_map_sorted:
         if base not in native_counts:
             base_initial = int(resolve_expression(config_data[section].get(base, {}).get("registers", "0"), parameters_list))
             native_counts[base] = base_initial
@@ -651,14 +653,14 @@ def parse_config(file_path):
         return total
 
     # Fill registers and subregisters for all modules in the tree
-    for base, section, full, _, _, _, _ in submodule_reg_add_map_sorted:
+    for base, section, full, _, _, _, _, _ in submodule_reg_add_map_sorted:
         total = compute_total(full)
         native = native_counts.get(full, 0)
         config_data[section][full]["registers"] = str(total)          # native + children
         config_data[section][full]["subregisters"] = str(total - native)  # children only
 
     # Ensure base (level 0) modules also get updated correctly
-    for base, section, _, _, _, _, _ in submodule_reg_add_map_sorted:
+    for base, section, _, _, _, _, _, _ in submodule_reg_add_map_sorted:
         total = compute_total(base)
         native = native_counts.get(base, 0)
         config_data[section][base]["registers"] = str(total)

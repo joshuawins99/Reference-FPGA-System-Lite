@@ -305,22 +305,29 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                         if submodule.module_name == module_name:
                             submodule_indent = "    " * submodule.module_name.count(submodule.separator)
                             module_name = str(module_name.split(submodule.separator)[-1])
+                            base_module_reg_expand = submodule.base_reg_exp
                             break
                 else:
                     submodule_indent = ""
+                    base_module_reg_expand = ""
+
+                if base_module_reg_expand == "TRUE":
+                    continue
+                    
                 # Module metadata
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "")
                 mod_reg_expand_str = mod_meta.get("expand_regs", '')
                 mod_repeat_inst = mod_meta.get("repeat_instance", {})
-                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}})
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}, "repeat_of": {}})
+                mod_repeat_str = f" - Repeat Instance of {mod_repeat_info['repeat_of']}" if mod_repeat_inst else ""
 
                 lines.append("")
                 if submodule_indent:
-                    lines.append(f"{submodule_indent}        -> Submodule: {mod_name_str} ({module_name})")
+                    lines.append(f"{submodule_indent}        -> Submodule: {mod_name_str} ({module_name}){mod_repeat_str}")
                 else:
-                    lines.append(f"{submodule_indent}        -> Module: {mod_name_str} ({module_name})")
+                    lines.append(f"{submodule_indent}        -> Module: {mod_name_str} ({module_name}){mod_repeat_str}")
                 lines.append(f"{submodule_indent}            - Bounds: 0x{start_addr:04X} ({start_addr:0d}) to 0x{end_addr:04X} ({end_addr:0d})")
                 if mod_repeat_inst != 'TRUE' or (mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE'):
                     lines.append(f"{submodule_indent}            - Register Count: {reg_count}")
