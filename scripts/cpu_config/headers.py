@@ -91,8 +91,6 @@ pub const Register = struct {
                     continue
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
-                if any(x.module_name == module_name for x in current_submodule_map):
-                    continue
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
                     end_addr = resolve_expression(module["bounds"][1], parameter_table)
