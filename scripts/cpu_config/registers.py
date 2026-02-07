@@ -178,6 +178,8 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
                     try:
                         start = resolve_expression(bounds[0], parameter_table)
                         end = resolve_expression(bounds[1], parameter_table)
+                        if start % alignment != 0 or end % alignment != 0:
+                            raise ValueError(f"Invalid Address Range for {mod_name}: [{start}:{end}]. Expects {alignment} byte alignment.")
                         if start is not None and end is not None:
                             if enabled == "TRUE":
                                 if overlaps((start, end), global_mask):
