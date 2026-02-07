@@ -7,6 +7,8 @@
 #define MAX_CMD_ARGS 3 // Command + arguments
 #define MAX_TOKEN_LENGTH 16
 
+#define TOKENIZER_SEPARATOR ','
+
 typedef struct {
     char rawValues[MAX_CMD_ARGS][MAX_TOKEN_LENGTH]; // Raw strings for each value
     uint32_t values[MAX_CMD_ARGS];                  // Parsed integers

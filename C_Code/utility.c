@@ -86,7 +86,7 @@ ParsedCommand ParseCommand(SliceU8 input) {
         j = 0;
         val = 0;
 
-        while (i < input.len && (current_char = input.ptr[i]) != ',' && current_char != '\n') {
+        while (i < input.len && (current_char = input.ptr[i]) != TOKENIZER_SEPARATOR && current_char != '\n') {
             if (current_char >= '0' && current_char <= '9') {
                 val = (val << 3) + (val << 1) + (current_char - '0');
             }
@@ -100,7 +100,7 @@ ParsedCommand ParseCommand(SliceU8 input) {
         result.values[field] = val;
         field++;
 
-        if (input.ptr[i] == ',') i++;
+        if (input.ptr[i] == TOKENIZER_SEPARATOR) i++;
     }
 
     result.valueCount = field;
