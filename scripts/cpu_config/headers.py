@@ -566,8 +566,9 @@ class FPGAInterface:
                             full_submodule_name = entry.module_name
                             sub_module = str(full_submodule_name.split(entry.separator)[-1])
                             zig_lines.append(f"    pub const {sub_module} = {full_submodule_name};")
-                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
-                    for i in range(reg_count-subregisters):
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
+                    modified_range_reg_count = max(1, reg_count - subregisters)
+                    for i in range(modified_range_reg_count):
                         addr = start_addr + i * reg_width_bytes
                         reg_key = f"Reg{i}"
                         reg_info = module.get("regs", {}).get(reg_key, {})
@@ -589,7 +590,10 @@ class FPGAInterface:
                         add_reg_comma = ","
                         if (i == (reg_count-subregisters)-1):
                             add_reg_comma = ""
-                        temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i} }}{add_reg_comma}")
+                        if (reg_count-subregisters) > 0:
+                            temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i} }}{add_reg_comma}")
+                        else:
+                            temp_c_storage.append(f"}};\n")
 
                         # C enum entry
                         comma = "," if i < (reg_count-subregisters) - 1 else ""
@@ -606,10 +610,11 @@ class FPGAInterface:
                             if reg_perm:
                                 c_addr_macros.append(f"// Register Permissions: {reg_perm}")
                         else:
-                            if i < (reg_count-subregisters)-1:
+                            if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
                                 c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
                             else:
-                                c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                                if (reg_count-subregisters) > 0:
+                                    c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
                                 c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
                                 c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
                                 c_lines_storage.append(f"    .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }},")
@@ -617,7 +622,10 @@ class FPGAInterface:
                                     if entry.module_parent == module_name:
                                         full_submodule_name = entry.module_name
                                         sub_module = str(full_submodule_name.split(entry.separator)[-1])
-                                        c_lines_storage.append(f"    .{sub_module} = {full_submodule_name},")
+                                        if (idx < len(current_submodule_map)-1) or (reg_count-subregisters) > 0:
+                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name},")
+                                        else:
+                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name}")
                         if reg_perm:
                             if reg_perm == "R":
                                 reg_perm_zig = "ReadOnly"
@@ -627,11 +635,12 @@ class FPGAInterface:
                                 reg_perm_zig = "ReadWrite"
                         else:
                             reg_perm_zig = "ReadWrite"
-                        if i < (reg_count-subregisters)-1:
+                        if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
                             zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
                         else:
-                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
-                            zig_lines.append(f"}};")
+                            if (reg_count-subregisters) > 0:
+                                zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
+                            zig_lines.append(f"}};\n")
                         # Python enum entry
                         if not new_python_header:
                             py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
@@ -647,8 +656,8 @@ class FPGAInterface:
                                 py_addr_lines.append(f"# Register Permissions: {reg_perm}")
                 else:
                     zig_lines.append(f"pub const {module_id.lower()} = struct {{")
-                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});\n")
-                    zig_lines.append(f" }};")
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
+                    zig_lines.append(f" }};\n")
                     c_lines_storage.append(f"typedef struct {{")
                     c_lines_storage.append(f"   CompactRegisterBlock block;")
                     c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
@@ -657,7 +666,7 @@ class FPGAInterface:
                     c_lines_storage.append(f"}};\n")
                 
                 c_lines_storage.extend(temp_c_storage)
-                if temp_c_storage:
+                if temp_c_storage and (reg_count-subregisters) > 0:
                     c_lines_storage.append(f"}};\n")
                 c_module_storage[0:0] = c_lines_storage
                 c_lines_storage = []

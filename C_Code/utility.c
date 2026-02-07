@@ -49,9 +49,19 @@ uint8_t stringMatch(const char *a, const char *b, uint8_t len) {
     return 1;
 }
 
-uint8_t stringMatchSlice(SliceU8 a, SliceU8 b) {
+uint8_t stringMatchSlicePrefix(SliceU8 a, SliceU8 b) {
     slen_t i;
     if (a.len < b.len) return 0;
+
+    for (i = 0; i < b.len; ++i) {
+        if (a.ptr[i] != b.ptr[i]) return 0;
+    }
+    return 1;
+}
+
+uint8_t stringMatchSlice(SliceU8 a, SliceU8 b) {
+    slen_t i;
+    if (a.len != b.len) return 0;
 
     for (i = 0; i < b.len; ++i) {
         if (a.ptr[i] != b.ptr[i]) return 0;
@@ -95,4 +105,16 @@ ParsedCommand ParseCommand(SliceU8 input) {
 
     result.valueCount = field;
     return result;
+}
+
+uint8_t numParsedArguments (ParsedCommand data) {
+    SliceU8 rawValueSlice;
+    uint8_t numArgs = 0;
+    for (int i = 0; i < MAX_CMD_ARGS; i++) {
+        rawValueSlice = cstr_to_slice(data.rawValues[i]);
+        if (rawValueSlice.len > 0) {
+            numArgs ++;
+        }
+    }
+    return numArgs;
 }

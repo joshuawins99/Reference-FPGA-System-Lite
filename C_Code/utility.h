@@ -17,8 +17,10 @@ char* str_cpy(char *, const char *);
 char* str_cat(char *, const char *);
 char* u32_to_ascii(uint32_t);
 uint8_t stringMatch(const char *, const char *, uint8_t);
+uint8_t stringMatchSlicePrefix(SliceU8, SliceU8);
 uint8_t stringMatchSlice(SliceU8, SliceU8);
 uint32_t checkAddress(uint32_t);
 ParsedCommand ParseCommand(SliceU8);
+uint8_t numParsedArguments (ParsedCommand);
 
 #endif

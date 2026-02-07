@@ -236,7 +236,7 @@ SliceU8 executeCommandsSerial(SliceU8 data) {
     uint8_t i;
     
     for (i = 0; i < num_commands; ++i) {
-        if (stringMatchSlice(data, commands[i].command) == 1) {
+        if (stringMatchSlicePrefix(data, commands[i].command) == 1) {
             if (queueMode == 1 && commands[i].command.ptr != (const uint8_t*)EXIT_QUEUE) {
                 enqueueCommand(data);
                 return cstr_to_slice(NULL);
@@ -297,7 +297,11 @@ void ReadUART() {
         char_iter = 0;
     }
 #else
-    Print(0, "> ");
+    if (queueMode == 1) {
+        Print(0, "[Queue] > ");
+    } else {
+        Print(0, "> ");
+    }
     read_line();
     UARTCommand(slice_range((uint8_t *)readuart, 0, char_iter));
 #endif
