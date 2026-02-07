@@ -2,26 +2,17 @@ import os
 import re
 from registers import resolve_expression, build_parameter_table, reorder_tree
 
-def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False, zig_header=False):
-
-    def sanitize_identifier(text):
+def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
 
+def export_zig_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False):
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
         os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
         current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
 
-        c_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.h")
         zig_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.zig")
-        py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
-
-        c_lines = []
-        c_module_storage = []
-        c_lines_storage = []
-        py_lines = []
         zig_lines = []
-        module_storage = []
 
         # Zig Header Boilerplate
         zig_lines.append("""\
@@ -88,6 +79,110 @@ pub const Register = struct {
     }
 };                    
 """)
+        
+        parameter_table = build_parameter_table(cpu_config)
+
+        # Modules
+        module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
+
+        for section in module_sections:
+            for module_name, module in cpu_config.get(section, {}).items():
+                if module_name == "BaseAddress" or not isinstance(module, dict):
+                    continue
+                if module.get("flag") != "TRUE" or "bounds" not in module:
+                    continue
+                if any(x.module_name == module_name for x in current_submodule_map):
+                    continue
+                try:
+                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
+                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                except Exception:
+                    continue
+
+                reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
+                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
+                module_id = module_name.upper()
+                mod_meta = module.get("metadata", {})
+                mod_name_str = mod_meta.get("name", module_name)
+                mod_desc_str = mod_meta.get("description", "").strip()
+                mod_reg_expand_str = mod_meta.get("expand_regs", '')
+                mod_repeat_inst = mod_meta.get("repeat_instance", '')
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}, "repeat_of": {}})
+
+                if "submodule_of" in module:
+                    for submodule in current_submodule_map:
+                        if submodule.module_name == module_name:
+                            base_module_reg_expand = submodule.base_reg_exp
+                            break
+                else:
+                    base_module_reg_expand = ""
+
+                if base_module_reg_expand == "TRUE":
+                    continue
+
+                # === Module Documentation ===
+                zig_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                if mod_desc_str:
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"// Module Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n//                     {line}"
+                    zig_lines.append(formatted_desc)
+
+                if (mod_reg_expand_str == 'FALSE' or (mod_repeat_inst == 'TRUE' and mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
+                    if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", ""): #Make submodules private
+                        zig_lines.append(f"const {module_id.lower()} = struct {{")
+                    else:
+                        zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    for idx, entry in enumerate(current_submodule_map):
+                        if entry.module_parent == module_name:
+                            full_submodule_name = entry.module_name
+                            sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                            zig_lines.append(f"    pub const {sub_module} = {full_submodule_name};")
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
+                    modified_range_reg_count = max(1, reg_count - subregisters)
+                    for i in range(modified_range_reg_count):
+                        reg_key = f"Reg{i}"
+                        reg_info = module.get("regs", {}).get(reg_key, {})
+                        reg_name_raw = reg_info.get("name", f"Reg{i}")
+                        reg_perm = reg_info.get("permissions", "").strip()
+                        reg_name_id = sanitize_identifier(reg_name_raw)
+                        reg_perm_zig = ""
+                        if reg_perm:
+                            if reg_perm == "R":
+                                reg_perm_zig = "ReadOnly"
+                            if reg_perm == "W":
+                                reg_perm_zig = "WriteOnly"
+                            if reg_perm == "R/W":
+                                reg_perm_zig = "ReadWrite"
+                        else:
+                            reg_perm_zig = "ReadWrite"
+                        if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
+                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
+                        else:
+                            if (reg_count-subregisters) > 0:
+                                zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
+                            zig_lines.append(f"}};\n")
+                else:
+                    zig_lines.append(f"pub const {module_id.lower()} = struct {{")
+                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
+                    zig_lines.append(f" }};\n")
+        
+        with open(zig_filename, "w") as f:
+            f.write("\n".join(zig_lines))
+        print(f"Zig header for {cpu_name} saved to: {zig_filename}")
+
+def export_c_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_c_header=False):
+    for cpu_name, cpu_config in parsed_configs.items():
+        output_dir = cpu_name
+        os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
+        current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
+
+        c_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.h")
+
+        c_lines = []
+        c_module_storage = []
+        c_lines_storage = []
 
         # C Header Boilerplate
         if not new_c_header:
@@ -148,6 +243,170 @@ static inline uint8_t Read8(Register reg) {{
 }}
                           
 """)
+            
+        temp_module_storage = []
+        temp_c_storage = []
+
+        # Parameter Table
+        parameter_table = build_parameter_table(cpu_config)
+
+        # Modules
+        module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
+
+        for section in module_sections:
+            for module_name, module in cpu_config.get(section, {}).items():
+                temp_module_storage = []
+                if module_name == "BaseAddress" or not isinstance(module, dict):
+                    continue
+                if module.get("flag") != "TRUE" or "bounds" not in module:
+                    continue
+                if any(x.module_name == module_name for x in current_submodule_map) and not new_c_header:
+                    continue
+                try:
+                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
+                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                except Exception:
+                    continue
+
+                reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
+                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
+                module_id = module_name.upper()
+                mod_meta = module.get("metadata", {})
+                mod_name_str = mod_meta.get("name", module_name)
+                mod_desc_str = mod_meta.get("description", "").strip()
+                mod_reg_expand_str = mod_meta.get("expand_regs", '')
+                mod_repeat_inst = mod_meta.get("repeat_instance", '')
+                mod_repeat_info = module.get("repeat", {"value": {}, "expand_regs": {}, "repeat_of": {}})
+
+                if "submodule_of" in module:
+                    for submodule in current_submodule_map:
+                        if submodule.module_name == module_name:
+                            base_module_reg_expand = submodule.base_reg_exp
+                            break
+                else:
+                    base_module_reg_expand = ""
+
+                if base_module_reg_expand == "TRUE":
+                    continue
+
+                # === Module Documentation ===
+                if not new_c_header:
+                    c_lines.append(f"// Module: {mod_name_str} ({module_name})")
+                c_lines_storage.append(f"// Module: {mod_name_str} ({module_name})")
+                if mod_desc_str:
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"// Module Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n//                     {line}"
+                    if not new_c_header:
+                        c_lines.append(formatted_desc)
+                    c_lines_storage.append(formatted_desc)
+                temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
+                if mod_desc_str:
+                    desc_lines = mod_desc_str.split('\n')
+                    formatted_desc = f"# Module Description: {desc_lines[0]}"
+                    for line in desc_lines[1:]:
+                        formatted_desc += f"\n#                     {line}"
+                    temp_module_storage.append(formatted_desc)
+
+                c_enum_entries = []
+                c_addr_macros = []
+
+                if (mod_reg_expand_str == 'FALSE' or (mod_repeat_inst == 'TRUE' and mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
+                    modified_range_reg_count = max(1, reg_count - subregisters)
+                    for i in range(modified_range_reg_count):
+                        addr = start_addr + i * reg_width_bytes
+                        reg_key = f"Reg{i}"
+                        reg_info = module.get("regs", {}).get(reg_key, {})
+                        reg_name_raw = reg_info.get("name", f"Reg{i}")
+                        reg_desc = reg_info.get("description", "").strip()
+                        reg_perm = reg_info.get("permissions", "").strip()
+                        reg_name_id = sanitize_identifier(reg_name_raw)
+                        entry_name = f"{module_id}_{reg_name_id}"
+
+                        if new_c_header and i == 0:
+                            c_lines_storage.append(f"typedef struct {{")
+                            c_lines_storage.append(f"    CompactRegisterBlock block;")
+                            for idx, entry in enumerate(current_submodule_map):
+                                    if entry.module_parent == module_name:
+                                        full_submodule_name = entry.module_name
+                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                                        c_lines_storage.append(f"    {full_submodule_name}_t {sub_module};")
+                        add_reg_comma = ","
+                        if (i == (reg_count-subregisters)-1):
+                            add_reg_comma = ""
+                        if (reg_count-subregisters) > 0:
+                            temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i} }}{add_reg_comma}")
+                        else:
+                            temp_c_storage.append(f"}};\n")
+
+                        comma = "," if i < (reg_count-subregisters) - 1 else ""
+                        if reg_desc:
+                            desc_lines = reg_desc.split('\n')
+                        if not new_c_header:
+                            c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
+                            c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
+                            if reg_desc:
+                                formatted_desc = f"// Register Description: {desc_lines[0]}"
+                                for line in desc_lines[1:]:
+                                    formatted_desc += f"\n//                      {line}"
+                                c_addr_macros.append(formatted_desc)
+                            if reg_perm:
+                                c_addr_macros.append(f"// Register Permissions: {reg_perm}")
+                        else:
+                            if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
+                                c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                            else:
+                                if (reg_count-subregisters) > 0:
+                                    c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
+                                c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
+                                c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
+                                c_lines_storage.append(f"    .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }},")
+                                for idx, entry in enumerate(current_submodule_map):
+                                    if entry.module_parent == module_name:
+                                        full_submodule_name = entry.module_name
+                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
+                                        if (idx < len(current_submodule_map)-1) or (reg_count-subregisters) > 0:
+                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name},")
+                                        else:
+                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name}")
+                else:
+                    c_lines_storage.append(f"typedef struct {{")
+                    c_lines_storage.append(f"   CompactRegisterBlock block;")
+                    c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
+                    c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
+                    c_lines_storage.append(f"   .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }}")
+                    c_lines_storage.append(f"}};\n")
+                
+                c_lines_storage.extend(temp_c_storage)
+                if temp_c_storage and (reg_count-subregisters) > 0:
+                    c_lines_storage.append(f"}};\n")
+                c_module_storage[0:0] = c_lines_storage
+                c_lines_storage = []
+                temp_c_storage = []
+                if not new_c_header:
+                    c_lines.extend(c_addr_macros)
+                    c_lines.append(f"static const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
+
+        if new_c_header:
+            for entry in c_module_storage:
+                c_lines.append(entry)
+            c_lines.append("#endif")
+        
+        with open(c_filename, "w") as f:
+            f.write("\n".join(c_lines))
+        print(f"C header for {cpu_name} saved to: {c_filename}")
+
+def export_python_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False):
+    for cpu_name, cpu_config in parsed_configs.items():
+        output_dir = cpu_name
+        os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
+        current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
+
+        py_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_registers.py")
+
+        py_lines = []
+        module_storage = []
 
         # Python Header Boilerplate
         if not new_python_header:
@@ -479,7 +738,6 @@ class FPGAInterface:
         """)
             
         temp_module_storage = []
-        temp_c_storage = []
 
         # Parameter Table
         parameter_table = build_parameter_table(cpu_config)
@@ -494,7 +752,7 @@ class FPGAInterface:
                     continue
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
-                if any(x.module_name == module_name for x in current_submodule_map) and not(new_c_header or new_python_header):
+                if any(x.module_name == module_name for x in current_submodule_map) and not new_python_header:
                     continue
                 try:
                     start_addr = resolve_expression(module["bounds"][0], parameter_table)
@@ -503,7 +761,6 @@ class FPGAInterface:
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
                 module_id = module_name.upper()
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
@@ -524,19 +781,6 @@ class FPGAInterface:
                     continue
 
                 # === Module Documentation ===
-                if not new_c_header:
-                    c_lines.append(f"// Module: {mod_name_str} ({module_name})")
-                c_lines_storage.append(f"// Module: {mod_name_str} ({module_name})")
-                zig_lines.append(f"// Module: {mod_name_str} ({module_name})")
-                if mod_desc_str:
-                    desc_lines = mod_desc_str.split('\n')
-                    formatted_desc = f"// Module Description: {desc_lines[0]}"
-                    for line in desc_lines[1:]:
-                        formatted_desc += f"\n//                     {line}"
-                    if not new_c_header:
-                        c_lines.append(formatted_desc)
-                    c_lines_storage.append(formatted_desc)
-                    zig_lines.append(formatted_desc)
                 temp_module_storage.append(f"# Module: {mod_name_str} ({module_name})")
                 if mod_desc_str:
                     desc_lines = mod_desc_str.split('\n')
@@ -545,140 +789,8 @@ class FPGAInterface:
                         formatted_desc += f"\n#                     {line}"
                     temp_module_storage.append(formatted_desc)
 
-                enum_name = f"{module_id}_REG"
-
-                # C Enum Collection
-                c_enum_entries = []
-                c_addr_macros = []
-
-                # Python Enum Block
-                #py_lines.append(f"class {enum_name}(Enum):")
-                py_enum_entries = []
                 py_addr_lines = []
 
-                if (mod_reg_expand_str == 'FALSE' or (mod_repeat_inst == 'TRUE' and mod_repeat_info["expand_regs"] == 'FALSE' and mod_reg_expand_str == 'FALSE')):
-                    if any(x.module_name == module_name for x in current_submodule_map) and module.get("submodule_of", ""): #Make submodules private
-                        zig_lines.append(f"const {module_id.lower()} = struct {{")
-                    else:
-                        zig_lines.append(f"pub const {module_id.lower()} = struct {{")
-                    for idx, entry in enumerate(current_submodule_map):
-                        if entry.module_parent == module_name:
-                            full_submodule_name = entry.module_name
-                            sub_module = str(full_submodule_name.split(entry.separator)[-1])
-                            zig_lines.append(f"    pub const {sub_module} = {full_submodule_name};")
-                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
-                    modified_range_reg_count = max(1, reg_count - subregisters)
-                    for i in range(modified_range_reg_count):
-                        addr = start_addr + i * reg_width_bytes
-                        reg_key = f"Reg{i}"
-                        reg_info = module.get("regs", {}).get(reg_key, {})
-                        reg_name_raw = reg_info.get("name", f"Reg{i}")
-                        reg_desc = reg_info.get("description", "").strip()
-                        reg_perm = reg_info.get("permissions", "").strip()
-                        reg_name_id = sanitize_identifier(reg_name_raw)
-                        entry_name = f"{module_id}_{reg_name_id}"
-                        reg_perm_zig = ""
-
-                        if new_c_header and i == 0:
-                            c_lines_storage.append(f"typedef struct {{")
-                            c_lines_storage.append(f"    CompactRegisterBlock block;")
-                            for idx, entry in enumerate(current_submodule_map):
-                                    if entry.module_parent == module_name:
-                                        full_submodule_name = entry.module_name
-                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
-                                        c_lines_storage.append(f"    {full_submodule_name}_t {sub_module};")
-                        add_reg_comma = ","
-                        if (i == (reg_count-subregisters)-1):
-                            add_reg_comma = ""
-                        if (reg_count-subregisters) > 0:
-                            temp_c_storage.append(f"    .{reg_name_id.lower()} = {{ {{0x{start_addr:04X} , {reg_count}, {reg_width_bytes} }}, {i} }}{add_reg_comma}")
-                        else:
-                            temp_c_storage.append(f"}};\n")
-
-                        # C enum entry
-                        comma = "," if i < (reg_count-subregisters) - 1 else ""
-                        if reg_desc:
-                            desc_lines = reg_desc.split('\n')
-                        if not new_c_header:
-                            c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
-                            c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")
-                            if reg_desc:
-                                formatted_desc = f"// Register Description: {desc_lines[0]}"
-                                for line in desc_lines[1:]:
-                                    formatted_desc += f"\n//                      {line}"
-                                c_addr_macros.append(formatted_desc)
-                            if reg_perm:
-                                c_addr_macros.append(f"// Register Permissions: {reg_perm}")
-                        else:
-                            if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
-                                c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
-                            else:
-                                if (reg_count-subregisters) > 0:
-                                    c_lines_storage.append(f"    Register {reg_name_id.lower()}; // [{reg_perm if reg_perm else 'R/W'}] {' '.join(desc_lines)}")
-                                c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
-                                c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
-                                c_lines_storage.append(f"    .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }},")
-                                for idx, entry in enumerate(current_submodule_map):
-                                    if entry.module_parent == module_name:
-                                        full_submodule_name = entry.module_name
-                                        sub_module = str(full_submodule_name.split(entry.separator)[-1])
-                                        if (idx < len(current_submodule_map)-1) or (reg_count-subregisters) > 0:
-                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name},")
-                                        else:
-                                            c_lines_storage.append(f"    .{sub_module} = {full_submodule_name}")
-                        if reg_perm:
-                            if reg_perm == "R":
-                                reg_perm_zig = "ReadOnly"
-                            if reg_perm == "W":
-                                reg_perm_zig = "WriteOnly"
-                            if reg_perm == "R/W":
-                                reg_perm_zig = "ReadWrite"
-                        else:
-                            reg_perm_zig = "ReadWrite"
-                        if i < (reg_count-subregisters)-1 and (reg_count-subregisters) > 0:
-                            zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
-                        else:
-                            if (reg_count-subregisters) > 0:
-                                zig_lines.append(f"    pub const {reg_name_id.lower()} = Register{{ .block = block, .offset = {i}, .perm = .{reg_perm_zig} }};")
-                            zig_lines.append(f"}};\n")
-                        # Python enum entry
-                        if not new_python_header:
-                            py_enum_entries.append(f"    {entry_name} = {i}  # {reg_name_raw}")
-                            py_addr_lines.append(f"{entry_name}_ADDR = 0x{addr:04X}")
-                            if reg_desc:
-                                #py_enum_entries.append(f"    #    {reg_desc}")
-                                desc_lines = reg_desc.split('\n')
-                                formatted_desc = f"# Register Description: {desc_lines[0]}"
-                                for line in desc_lines[1:]:
-                                    formatted_desc += f"\n#                      {line}"
-                                py_addr_lines.append(formatted_desc)
-                            if reg_perm:
-                                py_addr_lines.append(f"# Register Permissions: {reg_perm}")
-                else:
-                    zig_lines.append(f"pub const {module_id.lower()} = struct {{")
-                    zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
-                    zig_lines.append(f" }};\n")
-                    c_lines_storage.append(f"typedef struct {{")
-                    c_lines_storage.append(f"   CompactRegisterBlock block;")
-                    c_lines_storage.append(f"}} {module_id.lower()}_t;\n")
-                    c_lines_storage.append(f"static const {module_id.lower()}_t {module_id.lower()} = {{")
-                    c_lines_storage.append(f"   .block = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }}")
-                    c_lines_storage.append(f"}};\n")
-                
-                c_lines_storage.extend(temp_c_storage)
-                if temp_c_storage and (reg_count-subregisters) > 0:
-                    c_lines_storage.append(f"}};\n")
-                c_module_storage[0:0] = c_lines_storage
-                c_lines_storage = []
-                temp_c_storage = []
-
-                #c_lines.append(f"typedef enum {{")
-                #c_lines.extend(c_enum_entries)
-                #c_lines.append(f"}} {enum_name};\n")
-                if not new_c_header:
-                    c_lines.extend(c_addr_macros)
-                    c_lines.append(f"static const CompactRegisterBlock {module_id} = {{ 0x{start_addr:04X}, {reg_count}, {reg_width_bytes} }};\n")
-                #py_lines.extend(py_enum_entries)
                 py_lines.extend(py_addr_lines)
                 if not new_python_header:
                     py_lines.append(f"{module_id} = CompactRegisterBlock(0x{start_addr:04X}, {reg_count}, {reg_width_bytes})\n")
@@ -701,13 +813,11 @@ class FPGAInterface:
                                     current_module = module_id
                                     temp_module_storage.append(f"_{module_id}_subblocks = [")
                                     subblock_placed = True
-                                temp_module_storage.append(f"    ('{sub_module}', {offset_from_base}, _{entry[2]}),")
+                                temp_module_storage.append(f"    ('{sub_module}', {offset_from_base}, _{entry.module_name}),")
                             if idx == len(current_submodule_map)-1 and subblock_placed:
                                 temp_module_storage.append(f"]")
                         if subblock_placed == True:
                             subblock_name = f"_{module_id}_subblocks"
-                    # if any(x.module_name == module_name for x in current_submodule_map):
-                    #     hidden_entry_prefix = "_"
                     hidden_entry_prefix = "_"
                     #Normal Module Logic
                     register_defs = []
@@ -766,20 +876,6 @@ class FPGAInterface:
                     if not(any(x.module_name == module_name for x in current_submodule_map)):
                         temp_module_storage.append(f"FPGAInterface.{module_id.lower()} = _{module_id.lower()}")
                     module_storage[0:0] = temp_module_storage
-        
-        if new_c_header:
-            for entry in c_module_storage:
-                c_lines.append(entry)
-            c_lines.append("#endif")
-        
-        with open(c_filename, "w") as f:
-            f.write("\n".join(c_lines))
-        print(f"C header for {cpu_name} saved to: {c_filename}")
-
-        if zig_header:
-            with open(zig_filename, "w") as f:
-                f.write("\n".join(zig_lines))
-            print(f"Zig header for {cpu_name} saved to: {zig_filename}")
 
         for entry in module_storage:
             py_lines.append(entry)
@@ -787,3 +883,10 @@ class FPGAInterface:
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
         print(f"Python header for {cpu_name} saved to: {py_filename}\n")
+
+def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False, zig_header=False):
+    
+    export_c_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only, new_c_header=new_c_header)
+    export_python_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only, new_python_header=new_python_header)
+    if zig_header:
+        export_zig_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only)
