@@ -52,18 +52,21 @@ def check_config_files(directory, config_file_names):
         for folder in folders
     }
 
+def resolve_mod_include_filepath(base_dir, include_path, include_file_dirs):
+    for dir_path in include_file_dirs:
+        # Each candidate should be resolved relative to the current file’s directory
+        candidate = os.path.normpath(os.path.join(base_dir, dir_path, include_path))
+        if os.path.exists(candidate):
+            return candidate
+    
+
 def scrape_metadata(config_data, file_path, include_file_dirs, include_file, config_file_lines, current_line_index, has_name, has_description, indent_amount=0):
     
     include_path = parse_file_path(include_file, config_data)
     current_path = None
     base_dir = os.path.dirname(os.path.abspath(file_path))
 
-    for dir_path in include_file_dirs:
-        # Each candidate should be resolved relative to the current file’s directory
-        candidate = os.path.normpath(os.path.join(base_dir, dir_path, include_path))
-        if os.path.exists(candidate):
-            current_path = candidate
-            break
+    current_path = resolve_mod_include_filepath(base_dir, include_path, include_file_dirs)
 
     # Fallback if nothing matched
     if current_path is None:
@@ -464,7 +467,9 @@ def parse_config(file_path):
         elif current_module and module_include_match:
             if (current_register == None):
                 include_file = module_include_match.group(1)
-                absolute_path = os.path.dirname(parse_file_path(include_file, config_data))
+                absolute_path = os.path.normpath(os.path.dirname(parse_file_path(include_file, config_data)))
+                resolved_mod_filepath = resolve_mod_include_filepath(os.path.dirname(os.path.abspath(file_path)), parse_file_path(include_file, config_data), include_file_dirs)
+                config_data[current_section][key]["metadata"]["module_filepath"] = resolved_mod_filepath
                 if absolute_path not in include_file_dirs:
                     include_file_dirs.append(absolute_path)
                 existing_metadata = config_data[current_section][current_module]["metadata"]
