@@ -250,7 +250,7 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
                 current_base_module_subregister_count = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["subregisters"])
                 current_base_module_start_addr += 4*(int((current_base_module_end_addr-current_base_module_start_addr)//alignment + 1) - (current_base_module_subregister_count))
 
-            start_addr = find_free_address(submodule_mask, submodule.register_count*alignment, current_base_module_start_addr)
+            start_addr = find_free_address(submodule_mask, max(1, submodule.register_count)*alignment, current_base_module_start_addr)
             end_addr = start_addr + (submodule.register_count-1)*alignment
             submodule_mask.append((start_addr, end_addr))
             if "subregisters" in parsed_configs[cpu][submodule.section][submodule.module_name]:
