@@ -68,6 +68,7 @@ zig_header = False
 if args.gen_headers:
     new_python_header = False
     new_c_header = False
+    verilog_header = False
     for header in args.gen_headers:
         match header:
             case "new-python":
@@ -76,9 +77,13 @@ if args.gen_headers:
                 new_c_header = True
             case "zig":
                 zig_header = True
+            case "verilog":
+                verilog_header = True
     
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header) 
+        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, 
+                               new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header, 
+                               verilog_header=verilog_header) 
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)
