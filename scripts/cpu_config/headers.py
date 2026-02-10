@@ -1,5 +1,6 @@
 import os
 import re
+from collections import namedtuple
 from registers import resolve_expression, build_parameter_table, reorder_tree
 
 def sanitize_identifier(text):
@@ -11,19 +12,10 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
         os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
         current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
 
-        verilog_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_muxes.svh")
-        verilog_lines = []
-        
-        verilog_lines.append(f"""// Auto-generated data mux header
-`define MUX_CONNECT_SCALARS(BLK, CLK, RESET, ADDR, DATA_O) \\
-    assign BLK``_mux_cfg.clk_gen     = CLK; \\
-    assign BLK``_mux_cfg.reset_gen   = RESET; \\
-    assign BLK``_mux_cfg.address_gen = ADDR; \\
-    assign DATA_O                    = BLK``_mux_cfg.data_o_gen;
+        verilog_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_muxes.sv")
 
-`define MUX_CONNECT_DATA(BLK, IDX, SIG) \\
-    assign BLK``_mux_cfg.data_i_gen[IDX] = SIG;
-""")
+        verilog_lines = []
+        verilog_lines.append(f"// Auto-generated data mux modules and packages\n")
 
         parameter_table = build_parameter_table(cpu_config)
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
@@ -40,24 +32,30 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                     end_addr = resolve_expression(module["bounds"][1], parameter_table)
                 except Exception:
                     continue
-                
+
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
                 subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "").strip()
-                
+
                 num_ports = 0
+                offset = 0
                 mod_params_data = []
-                mod_params_indices = []
                 mod_params_base_addresses = []
+                mod_input_ports = []
+                mod_data_tuple = namedtuple("mod_data_tuple", ["index", "module_name",])
+                mod_data_i_values = []
+                mod_data_i_assignments = []
 
                 submodule_separator = current_submodule_map[0].separator
 
                 if (reg_count-subregisters) >= 1: #Account for if the module itself has registers
-                    mod_params_data.append(f"                   '{{'h{start_addr:04X}, {reg_count-subregisters}}}, // {str(module_name.split(submodule_separator)[-1])}\n")
-                    mod_params_indices.append(f"localparam int unsigned {module_name} = {0};")
-                    mod_params_base_addresses.append(f"localparam {module_name}_base_address = 'h{start_addr:04X};")
+                    mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {str(module_name.split(submodule_separator)[-1])}\n")
+                    mod_params_base_addresses.append(f"localparam {module_name}_offset = 'h{offset:04X};")
+                    mod_input_ports.append(f"input  logic [31:0] {module_name}_data_i,")
+                    mod_data_i_values.append(mod_data_tuple(num_ports, module_name))
+                    offset += (reg_count-subregisters)*reg_width_bytes
                     num_ports += 1
 
                 for elements in current_submodule_map:
@@ -66,17 +64,27 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                         current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
                         current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
                         stripped_name = str(elements.module_name.split(submodule_separator)[-1])
-                        mod_params_data.append(f"                   '{{'h{current_module_start_addr:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
-                        mod_params_indices.append(f"localparam int unsigned {stripped_name} = {num_ports};")
-                        mod_params_base_addresses.append(f"localparam {stripped_name}_base_address = 'h{current_module_start_addr:04X};")
+                        mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
+                        mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
+                        mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
+                        mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
                         num_ports += 1
+                        offset += (current_module_reg_count)*reg_width_bytes
 
                 mod_params_data[-1] = mod_params_data[-1].replace("},", "} ") #Remove comma from last entry
-                mod_params_indices_joined = "\n    ".join(mod_params_base_addresses + mod_params_indices)
-                
+                mod_params_base_address_joined = "\n    ".join(mod_params_base_addresses)
+
+                mod_input_ports[-1] = mod_input_ports[-1].replace("},", "} ") #Remove comma from last entry
+                mod_input_ports_joined = "\n    ".join(mod_input_ports)
+
+                for elements in mod_data_i_values:
+                    mod_data_i_assignments.append(f"assign data_i_gen[{elements.index}] = {elements.module_name}_data_i;")
+
+                mod_data_i_assignments_joined = "\n    ".join(mod_data_i_assignments)
+
                 if num_ports <= 1: #If num_ports 1 or less, no need for a mux
                     continue
-                
+
                 # Documentation
                 verilog_lines.append(f"// Module: {mod_name_str} ({module_name.split(submodule_separator)[-1]})")
                 if mod_desc_str:
@@ -87,72 +95,79 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                     verilog_lines.append(formatted_desc)
 
                 verilog_boilerplate = f"""\
-`ifdef INSTANTIATE_REG_GROUP_MUX_{module_name.split(submodule_separator)[-1]}
-    {mod_params_indices_joined}
-    generate
-        if (1) begin : {module_name.split(submodule_separator)[-1]}_mux_cfg
-            typedef struct packed {{
-                logic [31:0] base_address;
-                logic [31:0] num_regs;
-            }} mux_t;
+package {cpu_name}_{module_name.split(submodule_separator)[-1]}_package;
+    {mod_params_base_address_joined}
+endpackage
 
-            localparam int unsigned NUM_PORTS = {num_ports};
-            localparam mux_t MODULE_PARAMS [NUM_PORTS] = '{{\n{"".join(mod_params_data)}                }};
+module {cpu_name}_{module_name.split(submodule_separator)[-1]}_mux #(
+    parameter BaseAddress = 0
+)(
+    input  logic        clk_i,
+    input  logic        reset_i,
+    input  logic [31:0] address_i,
+    {mod_input_ports_joined}
+    output logic [31:0] data_o
 
-            logic        clk_gen;
-            logic [31:0] address_gen;
-            logic        reset_gen;
-            logic [31:0] data_i_gen [NUM_PORTS];
-            logic [31:0] data_o_gen;
+);
+    typedef struct packed {{
+        logic [31:0] base_offset;
+        logic [31:0] num_regs;
+    }} mux_t;
 
-            logic [$clog2(NUM_PORTS)-1:0] sel_index;
-            logic [$clog2(NUM_PORTS)-1:0] sel_index_reg;
-            logic                         address_hit;
-            logic [31:0]                  start_addr;
-            logic [31:0]                  end_addr;
+    localparam int unsigned NUM_PORTS = {num_ports};
+    localparam mux_t MODULE_PARAMS [NUM_PORTS] = '{{\n{"".join(mod_params_data)}                }};
 
-            always_comb begin
-                sel_index = sel_index_reg;
-                address_hit = 1'b0;
+    logic [31:0] data_i_gen [NUM_PORTS];
+    logic [31:0] data_o_gen;
 
-                for (int unsigned i = 0; i < NUM_PORTS; i++) begin
-                    start_addr = MODULE_PARAMS[i].base_address;
-                    end_addr   = MODULE_PARAMS[i].base_address + MODULE_PARAMS[i].num_regs*{reg_width_bytes};
+    logic [$clog2(NUM_PORTS)-1:0] sel_index;
+    logic [$clog2(NUM_PORTS)-1:0] sel_index_reg;
+    logic                         address_hit;
+    logic [31:0]                  start_addr;
+    logic [31:0]                  end_addr;
 
-                    if (address_gen >= start_addr && address_gen < end_addr) begin
-                        sel_index = i;
-                        address_hit = 1'b1;
-                        break;
-                    end
-                end
+    {mod_data_i_assignments_joined}
+
+    always_comb begin
+        sel_index = sel_index_reg;
+        address_hit = 1'b0;
+
+        for (int unsigned i = 0; i < NUM_PORTS; i++) begin
+            start_addr = MODULE_PARAMS[i].base_offset + BaseAddress;
+            end_addr   = MODULE_PARAMS[i].base_offset + BaseAddress + MODULE_PARAMS[i].num_regs*{reg_width_bytes};
+
+            if (address_i >= start_addr && address_i < end_addr) begin
+                sel_index = i;
+                address_hit = 1'b1;
+                break;
             end
-
-            always_ff @(posedge clk_gen) begin
-                if (reset_gen == 1'b1) begin
-                    sel_index_reg <= '0;
-                end else if (address_hit == 1) begin
-                    sel_index_reg <= sel_index;
-                end
-            end
-
-            always_comb begin
-                data_o_gen = '0;
-                for (int unsigned i = 0; i < NUM_PORTS; i++) begin
-                    if (sel_index_reg == i) begin
-                        data_o_gen = data_i_gen[i];
-                    end
-                end
-            end
-
         end
-    endgenerate
-`endif
+    end
+
+    always_ff @(posedge clk_i) begin
+        if (reset_i == 1'b1) begin
+            sel_index_reg <= '0;
+        end else if (address_hit == 1) begin
+            sel_index_reg <= sel_index;
+        end
+    end
+
+    always_comb begin
+        data_o = '0;
+        for (int unsigned i = 0; i < NUM_PORTS; i++) begin
+            if (sel_index_reg == i) begin
+                data_o = data_i_gen[i];
+            end
+        end
+    end
+
+endmodule
 """
                 verilog_lines.append(verilog_boilerplate)
 
         with open(verilog_filename, "w") as f:
             f.write("\n".join(verilog_lines))
-        print(f"Verilog mux header for {cpu_name} saved to: {verilog_filename}")
+        print(f"Verilog mux modules and packages for {cpu_name} saved to: {verilog_filename}")
 
 def export_zig_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False):
     for cpu_name, cpu_config in parsed_configs.items():
