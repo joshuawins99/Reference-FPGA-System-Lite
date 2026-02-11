@@ -6,21 +6,53 @@ from registers import resolve_expression, build_parameter_table, reorder_tree
 def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
 
-def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False):
+def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, verilog_muxes=False, verilog_regs=False):
+    regs_package_mask_list = []
+    mux_package_mask_list = []
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
         os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
         current_submodule_map = reorder_tree(submodule_reg_map)[cpu_name]
-
         verilog_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_muxes.sv")
-
         verilog_lines = []
         verilog_lines.append(f"// Auto-generated data mux modules and packages\n")
-
+        submodule_separator = current_submodule_map[0].separator
+        mod_reg_package = []
         parameter_table = build_parameter_table(cpu_config)
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
+
         for section in module_sections:
             for module_name, module in cpu_config.get(section, {}).items():
+                mod_regs = module.get("regs", {})
+                mod_reg_offsets = []
+
+                if not cpu_config[section][module_name]["metadata"].get("repeat_instance", ''):
+                    for idx, _ in enumerate(mod_regs):
+                        reg_key = f"Reg{idx}"
+                        reg_info = module.get("regs", {}).get(reg_key, {})
+                        reg_name = sanitize_identifier(reg_info.get('name',{})).lower()
+                        mod_reg_offsets.append(f"localparam {reg_name}_offset = 'h{(idx*reg_width_bytes):04X};")
+                    
+                    module_name_stripped = str(module_name.split(submodule_separator)[-1])
+
+                    if mod_reg_offsets and not any(x == module_name_stripped for x in regs_package_mask_list):
+                        mod_reg_offsets_joined = "\n    ".join(mod_reg_offsets)
+                        regs_package_mask_list.append(module_name_stripped)
+                        mod_reg_package.append(f"""\
+package {module_name_stripped}_regs_package;
+    {mod_reg_offsets_joined}
+
+    function logic [31:0] get_address (
+        input logic [31:0] BaseAddress,
+        input logic [31:0] Offset
+    );
+        begin
+            get_address = BaseAddress+Offset;
+        end
+    endfunction
+endpackage                       
+""")
+
                 if module_name == "BaseAddress" or not isinstance(module, dict):
                     continue
                 if not any(x.module_parent == module_name for x in current_submodule_map):
@@ -43,36 +75,46 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                 offset = 0
                 mod_params_data = []
                 mod_params_base_addresses = []
+                mod_params_reg_count = []
                 mod_input_ports = []
                 mod_data_tuple = namedtuple("mod_data_tuple", ["index", "module_name",])
                 mod_data_i_values = []
                 mod_data_i_assignments = []
 
-                submodule_separator = current_submodule_map[0].separator
-
                 if (reg_count-subregisters) >= 1: #Account for if the module itself has registers
-                    mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {str(module_name.split(submodule_separator)[-1])}\n")
-                    mod_params_base_addresses.append(f"localparam {module_name}_offset = 'h{offset:04X};")
-                    mod_input_ports.append(f"input  logic [31:0] {module_name}_data_i,")
-                    mod_data_i_values.append(mod_data_tuple(num_ports, module_name))
-                    offset += (reg_count-subregisters)*reg_width_bytes
-                    num_ports += 1
+                     if not any(x == module_name for x in mux_package_mask_list):
+                        mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {str(module_name.split(submodule_separator)[-1])}\n")
+                        mod_params_base_addresses.append(f"localparam {module_name}_offset = 'h{offset:04X};")
+                        repeat_instance = cpu_config[section][module_name]["metadata"].get("repeat_instance", '')
+                        if not repeat_instance:
+                            mod_params_reg_count.append(f"localparam {module_name}_reg_count = {reg_count-subregisters};")
+                            mux_package_mask_list.append(module_name)
+                        mod_input_ports.append(f"input  logic [31:0] {module_name}_data_i,")
+                        mod_data_i_values.append(mod_data_tuple(num_ports, module_name))
+                        offset += (reg_count-subregisters)*reg_width_bytes
+                        num_ports += 1
 
                 for elements in current_submodule_map:
                     if module_name == elements.module_parent:
-                        current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
-                        current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
-                        current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
                         stripped_name = str(elements.module_name.split(submodule_separator)[-1])
-                        mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
-                        mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
-                        mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
-                        mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
-                        num_ports += 1
-                        offset += (current_module_reg_count)*reg_width_bytes
+                        if not any(x == stripped_name for x in mux_package_mask_list):
+                            current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
+                            current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
+                            current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
+                            mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
+                            mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
+                            repeat_instance = cpu_config[section][elements.module_name]["metadata"].get("repeat_instance", '')
+                            if not repeat_instance:
+                                mod_params_reg_count.append(f"localparam {stripped_name}_reg_count = {current_module_reg_count};")
+                                mux_package_mask_list.append(stripped_name)
+                            mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
+                            mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
+                            num_ports += 1
+                            offset += (current_module_reg_count)*reg_width_bytes
 
                 mod_params_data[-1] = mod_params_data[-1].replace("},", "} ") #Remove comma from last entry
                 mod_params_base_address_joined = "\n    ".join(mod_params_base_addresses)
+                mod_params_reg_count_joined = "\n    ".join(mod_params_reg_count)
 
                 mod_input_ports[-1] = mod_input_ports[-1].replace("},", "} ") #Remove comma from last entry
                 mod_input_ports_joined = "\n    ".join(mod_input_ports)
@@ -95,11 +137,12 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                     verilog_lines.append(formatted_desc)
 
                 verilog_boilerplate = f"""\
-package {cpu_name}_{module_name.split(submodule_separator)[-1]}_package;
+package {module_name.split(submodule_separator)[-1]}_mux_package;
     {mod_params_base_address_joined}
+    {mod_params_reg_count_joined}
 endpackage
 
-module {cpu_name}_{module_name.split(submodule_separator)[-1]}_mux #(
+module {module_name.split(submodule_separator)[-1]}_mux #(
     parameter BaseAddress = 0
 )(
     input  logic        clk_i,
@@ -166,7 +209,10 @@ endmodule
                 verilog_lines.append(verilog_boilerplate)
 
         with open(verilog_filename, "w") as f:
-            f.write("\n".join(verilog_lines))
+            if verilog_muxes:
+                f.write("\n".join(verilog_lines))
+            if verilog_regs:
+                f.write("\n".join(mod_reg_package))
         print(f"Verilog mux modules and packages for {cpu_name} saved to: {verilog_filename}")
 
 def export_zig_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False):
@@ -1046,11 +1092,13 @@ class FPGAInterface:
             f.write("\n".join(py_lines))
         print(f"Python header for {cpu_name} saved to: {py_filename}\n")
 
-def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=False, new_c_header=False, zig_header=False, verilog_header=False):
+def export_per_cpu_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, 
+                           new_python_header=False, new_c_header=False, zig_header=False, verilog_muxes=False, verilog_regs=False):
     
     export_c_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only, new_c_header=new_c_header)
     export_python_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only, new_python_header=new_python_header)
     if zig_header:
         export_zig_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only)
-    if verilog_header:
-        export_verilog_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only)
+    if verilog_muxes or verilog_regs:
+        export_verilog_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, reg_width_bytes=reg_width_bytes, user_modules_only=user_modules_only, 
+                               verilog_muxes=verilog_muxes, verilog_regs=verilog_regs)
