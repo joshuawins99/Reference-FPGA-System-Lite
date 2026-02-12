@@ -18,6 +18,8 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
         verilog_lines.append(f"// Auto-generated data mux modules and packages\n")
         submodule_separator = current_submodule_map[0].separator
         mod_reg_package = []
+        local_regs_package_mask_list = []
+        local_mux_package_mask_list = []
         parameter_table = build_parameter_table(cpu_config)
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -35,10 +37,12 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                     
                     module_name_stripped = str(module_name.split(submodule_separator)[-1])
 
-                    if mod_reg_offsets and not any(x == module_name_stripped for x in regs_package_mask_list):
-                        mod_reg_offsets_joined = "\n    ".join(mod_reg_offsets)
-                        regs_package_mask_list.append(module_name_stripped)
-                        mod_reg_package.append(f"""\
+                    if mod_reg_offsets:
+                        if not any(x == module_name_stripped for x in local_regs_package_mask_list):
+                            if not any(x == module_name_stripped for x in regs_package_mask_list):
+                                mod_reg_offsets_joined = "\n    ".join(mod_reg_offsets)
+                                regs_package_mask_list.append(module_name_stripped)
+                                mod_reg_package.append(f"""\
 package {module_name_stripped}_regs_package;
     {mod_reg_offsets_joined}
 
@@ -52,6 +56,8 @@ package {module_name_stripped}_regs_package;
     endfunction
 endpackage                       
 """)
+                        else:
+                           raise RuntimeError(f"Multiple definitions of module instance name: '{module_name}'. Please rename.") 
 
                 if module_name == "BaseAddress" or not isinstance(module, dict):
                     continue
@@ -76,41 +82,54 @@ endpackage
                 mod_params_data = []
                 mod_params_base_addresses = []
                 mod_params_reg_count = []
+                mod_params_instances_tuple = namedtuple("mod_params_instances_tuple", ["module_name", "repeat_instance",])
+                mod_num_instances = []
+                mod_params_num_instances = []
                 mod_input_ports = []
                 mod_data_tuple = namedtuple("mod_data_tuple", ["index", "module_name",])
                 mod_data_i_values = []
                 mod_data_i_assignments = []
 
                 if (reg_count-subregisters) >= 1: #Account for if the module itself has registers
-                     if not any(x == module_name for x in mux_package_mask_list):
-                        mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {str(module_name.split(submodule_separator)[-1])}\n")
-                        mod_params_base_addresses.append(f"localparam {module_name}_offset = 'h{offset:04X};")
-                        repeat_instance = cpu_config[section][module_name]["metadata"].get("repeat_instance", '')
-                        if not repeat_instance:
-                            mod_params_reg_count.append(f"localparam {module_name}_reg_count = {reg_count-subregisters};")
-                            mux_package_mask_list.append(module_name)
-                        mod_input_ports.append(f"input  logic [31:0] {module_name}_data_i,")
-                        mod_data_i_values.append(mod_data_tuple(num_ports, module_name))
-                        offset += (reg_count-subregisters)*reg_width_bytes
-                        num_ports += 1
+                    if not any(x == module_name for x in local_mux_package_mask_list):
+                        if not any(x == module_name for x in mux_package_mask_list):
+                            stripped_name = str(module_name.split(submodule_separator)[-1])
+                            mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {stripped_name}\n")
+                            mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
+                            repeat_instance = cpu_config[section][module_name]["metadata"].get("repeat_instance", '')
+                            if not repeat_instance:
+                                mod_params_reg_count.append(f"localparam {stripped_name}_reg_count = {reg_count-subregisters};")
+                                if not any(x == stripped_name for x in local_mux_package_mask_list): #Check to see if module was already added
+                                    local_mux_package_mask_list.append(stripped_name)
+                            mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
+                            mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
+                            offset += (reg_count-subregisters)*reg_width_bytes
+                            num_ports += 1
+                    else:
+                        raise RuntimeError(f"Multiple definitions of module instance name: '{module_name}'. Please rename.")
 
                 for elements in current_submodule_map:
                     if module_name == elements.module_parent:
                         stripped_name = str(elements.module_name.split(submodule_separator)[-1])
-                        if not any(x == stripped_name for x in mux_package_mask_list):
-                            current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
-                            current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
-                            current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
-                            mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
-                            mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
-                            repeat_instance = cpu_config[section][elements.module_name]["metadata"].get("repeat_instance", '')
-                            if not repeat_instance:
-                                mod_params_reg_count.append(f"localparam {stripped_name}_reg_count = {current_module_reg_count};")
-                                mux_package_mask_list.append(stripped_name)
-                            mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
-                            mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
-                            num_ports += 1
-                            offset += (current_module_reg_count)*reg_width_bytes
+                        if not any(x == stripped_name for x in local_mux_package_mask_list):
+                            if not any(x == module_name for x in mux_package_mask_list):
+                                current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
+                                current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
+                                current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
+                                mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_name}\n")
+                                mod_params_base_addresses.append(f"localparam {stripped_name}_offset = 'h{offset:04X};")
+                                repeat_instance = cpu_config[section][elements.module_name]["metadata"].get("repeat_instance", '')
+                                if not repeat_instance:
+                                    mod_params_reg_count.append(f"localparam {stripped_name}_reg_count = {current_module_reg_count};")
+                                    if not any(x == stripped_name for x in local_mux_package_mask_list): #Check to see if module was already added
+                                        local_mux_package_mask_list.append(stripped_name)
+                                mod_num_instances.append(mod_params_instances_tuple(stripped_name, repeat_instance))
+                                mod_input_ports.append(f"input  logic [31:0] {stripped_name}_data_i,")
+                                mod_data_i_values.append(mod_data_tuple(num_ports, stripped_name))
+                                num_ports += 1
+                                offset += (current_module_reg_count)*reg_width_bytes
+                        else:
+                            raise RuntimeError(f"Multiple definitions of module instance name: '{stripped_name}'. Please rename.")
 
                 mod_params_data[-1] = mod_params_data[-1].replace("},", "} ") #Remove comma from last entry
                 mod_params_base_address_joined = "\n    ".join(mod_params_base_addresses)
@@ -121,6 +140,21 @@ endpackage
 
                 for elements in mod_data_i_values:
                     mod_data_i_assignments.append(f"assign data_i_gen[{elements.index}] = {elements.module_name}_data_i;")
+                
+                mod_params_num_instances_module_name = None
+                num_instance_counter = 1
+                for elements in mod_num_instances:
+                    if not elements.repeat_instance:
+                        if mod_params_num_instances_module_name is not None:
+                            mod_params_num_instances.append(f"localparam {mod_params_num_instances_module_name}_num_instances = {num_instance_counter};")
+                        mod_params_num_instances_module_name = elements.module_name
+                        num_instance_counter = 1
+                    else:
+                        num_instance_counter += 1
+                if mod_params_num_instances_module_name is not None:
+                    mod_params_num_instances.append(f"localparam {mod_params_num_instances_module_name}_num_instances = {num_instance_counter};")
+
+                mod_params_num_instances_joined = "\n    ".join(mod_params_num_instances)
 
                 mod_data_i_assignments_joined = "\n    ".join(mod_data_i_assignments)
 
@@ -140,6 +174,7 @@ endpackage
 package {module_name.split(submodule_separator)[-1]}_mux_package;
     {mod_params_base_address_joined}
     {mod_params_reg_count_joined}
+    {mod_params_num_instances_joined}
 endpackage
 
 module {module_name.split(submodule_separator)[-1]}_mux #(
@@ -207,6 +242,12 @@ module {module_name.split(submodule_separator)[-1]}_mux #(
 endmodule
 """
                 verilog_lines.append(verilog_boilerplate)
+
+        for item in local_mux_package_mask_list:
+            mux_package_mask_list.append(item)
+
+        for item in local_regs_package_mask_list:
+            regs_package_mask_list.append(item)
 
         with open(verilog_filename, "w") as f:
             if verilog_muxes:

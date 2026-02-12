@@ -130,15 +130,18 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
     """
 
     def find_free_address(used_ranges, needed_size, start_from=0x0000):
+        used_sorted = sorted(used_ranges, key=lambda r: r[0])
         addr = (start_from + alignment - 1) & ~(alignment - 1)
-        while True:
-            end_addr = addr + needed_size - 1
-            overlap = any(not (end_addr < s or addr > e) for s, e in used_ranges)
-            if not overlap:
-                return addr
-            addr += alignment
 
-    for cpu_name, cpu_config in parsed_configs.items():
+        for start, end in used_sorted:
+            end_addr = addr + needed_size - 1
+            if end_addr < start:
+                return addr
+            if addr <= end:
+                addr = (end + 1 + alignment - 1) & ~(alignment - 1)
+        return addr
+
+    for _, cpu_config in parsed_configs.items():
         # Step 1: Build parameter table
         parameter_table = build_parameter_table(cpu_config)
 
