@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser(prog="generate_cpu_instance.py", description="G
 parser.add_argument( "--help", action="help", help="Show this help message and exit")
 parser.add_argument("--build", action='store_true', help="Build CPU Code and create combined output sv")
 parser.add_argument("--configs-path", help="Config directories path")
-parser.add_argument("--gen-headers", nargs="+", help="Generate header files. Options are: new-python, new-c, zig")
+parser.add_argument("--gen-headers", nargs="+", help="Generate header files. Options are: new-python, new-c, zig, verilog-muxes, verilog-regs, strip-verilog")
 parser.add_argument("--print-all-registers", action='store_true', help="Prints all registers to console")
 parser.add_argument("--print-user-registers", action='store_true', help="Prints user registers to console")
 parser.add_argument("--save-all-registers", action='store_true', help="Saves all registers to a cpu_registers.txt file")
@@ -70,8 +70,11 @@ if args.gen_headers:
     new_c_header = False
     verilog_muxes = False
     verilog_regs = False
+    strip_verilog = False
     for header in args.gen_headers:
         match header:
+            case "strip-verilog": #Strips cpu name from prefix of generated packages and modules
+                strip_verilog = True
             case "new-python":
                 new_python_header = True
             case "new-c":
@@ -86,7 +89,7 @@ if args.gen_headers:
     if (filtered_dirs):
         export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, 
                                new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header, 
-                               verilog_muxes=verilog_muxes, verilog_regs=verilog_regs) 
+                               verilog_muxes=verilog_muxes, verilog_regs=verilog_regs, strip_verilog=strip_verilog) 
 
 c_code_folders = get_c_code_folders(parsed_configs)
 #print(c_code_folders)

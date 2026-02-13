@@ -27,12 +27,10 @@ def generate_verilog(mem_file, output_file, words=256, offset=0, prefill=1):
     reg [7:0] mem4 [0:WORDS-1];
 
     initial begin
-        for(int i = 0; i < WORDS; i++) begin
-            mem1[i] = 0;
-            mem2[i] = 0;
-            mem3[i] = 0;
-            mem4[i] = 0;
-        end
+        mem1 = '{{default:0}};
+        mem2 = '{{default:0}};
+        mem3 = '{{default:0}};
+        mem4 = '{{default:0}};
         if (PREFILL) begin
 """
 
