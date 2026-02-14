@@ -590,7 +590,7 @@ def parse_config(file_path):
                     current_module_expand = module_data.get("metadata").get("expand_regs")
                     current_repeat_expand = module_data.get("repeat", {}).get("expand_regs", {})
                     for module, module_data in data.items():
-                        if module.startswith(current_module_level) and current_module_expand == "TRUE":
+                        if module.startswith(current_module_level) and (current_module_expand == "TRUE" or current_repeat_expand == "TRUE"):
                             new_section_data[module]["metadata"]["expand_regs"] = current_module_expand
                             new_section_data[module].setdefault("repeat", {})
                             new_section_data[module]["repeat"]["expand_regs"] = current_repeat_expand

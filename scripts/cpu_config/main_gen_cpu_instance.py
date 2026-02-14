@@ -73,7 +73,7 @@ if args.gen_headers:
     strip_verilog = False
     for header in args.gen_headers:
         match header:
-            case "strip-verilog": #Strips cpu name from prefix of generated packages and modules
+            case "strip-verilog": #Strips prefix of generated packages and modules
                 strip_verilog = True
             case "new-python":
                 new_python_header = True

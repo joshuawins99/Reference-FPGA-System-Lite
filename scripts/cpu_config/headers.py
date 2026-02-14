@@ -36,16 +36,14 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
                         mod_reg_offsets.append(f"localparam {reg_name}_offset = 'h{(idx*reg_width_bytes):04X};")
                     
                     module_name_stripped = str(module_name.split(submodule_separator)[-1])
-                    stripped_module_name = module_name_stripped
-                    stripped_name = cpu_name + "_" + module_name_stripped if not strip_verilog else module_name_stripped
-
+                    stripped_name = module_name if not strip_verilog else module_name_stripped
                     if mod_reg_offsets:
-                        if not any(x == stripped_name for x in local_regs_package_mask_list):
-                            if not any(x == module_name_stripped for x in regs_package_mask_list):
+                        if not local_regs_package_mask_list.count(stripped_name) > 1:
+                            if not regs_package_mask_list.count(stripped_name) > 1:
                                 mod_reg_offsets_joined = "\n    ".join(mod_reg_offsets)
                                 regs_package_mask_list.append(stripped_name)
                                 mod_reg_package.append(f"""\
-package {cpu_name + "_" if not strip_verilog else ""}{module_name_stripped}_regs_package;
+package {stripped_name}_regs_package;
     {mod_reg_offsets_joined}
 
     function logic [31:0] get_address (
@@ -92,19 +90,21 @@ endpackage
                 mod_data_i_values = []
                 mod_data_i_assignments = []
 
+                if cpu_config[section][module_name]["metadata"].get("repeat_instance", ''):
+                    continue
+
                 if (reg_count-subregisters) >= 1: #Account for if the module itself has registers
-                    if not any(x == module_name for x in local_mux_package_mask_list):
-                        if not any(x == module_name for x in mux_package_mask_list):
-                            stripped_name = str(module_name.split(submodule_separator)[-1])
-                            stripped_module_name = stripped_name
-                            stripped_name = cpu_name + "_" + stripped_name if not strip_verilog else stripped_name
+                    stripped_name = str(module_name.split(submodule_separator)[-1])
+                    stripped_module_name = stripped_name
+                    stripped_name = module_name if not strip_verilog else module_name_stripped
+                    if not local_mux_package_mask_list.count(stripped_name) > 1:
+                        if not mux_package_mask_list.count(stripped_name) > 1:
                             mod_params_data.append(f"                   '{{'h{offset:04X}, {reg_count-subregisters}}}, // {stripped_module_name}\n")
                             mod_params_base_addresses.append(f"localparam {stripped_module_name}_offset = 'h{offset:04X};")
                             repeat_instance = cpu_config[section][module_name]["metadata"].get("repeat_instance", '')
                             if not repeat_instance:
-                                mod_params_reg_count.append(f"localparam {stripped_name}_reg_count = {reg_count-subregisters};")
-                                if not any(x == stripped_name for x in local_mux_package_mask_list): #Check to see if module was already added
-                                    local_mux_package_mask_list.append(stripped_name)
+                                mod_params_reg_count.append(f"localparam {stripped_module_name}_reg_count = {reg_count-subregisters};")
+                                local_mux_package_mask_list.append(stripped_name)
                             mod_input_ports.append(f"input  logic [31:0] {stripped_module_name}_data_i,")
                             mod_data_i_values.append(mod_data_tuple(num_ports, stripped_module_name))
                             offset += (reg_count-subregisters)*reg_width_bytes
@@ -116,9 +116,9 @@ endpackage
                     if module_name == elements.module_parent:
                         stripped_name = str(elements.module_name.split(submodule_separator)[-1])
                         stripped_module_name = stripped_name
-                        stripped_name = cpu_name + "_" + stripped_name if not strip_verilog else stripped_name
-                        if not any(x == stripped_name for x in local_mux_package_mask_list):
-                            if not any(x == module_name for x in mux_package_mask_list):
+                        stripped_name = elements.module_name if not strip_verilog else stripped_name
+                        if not local_mux_package_mask_list.count(stripped_name) > 1:
+                            if not mux_package_mask_list.count(stripped_name) > 1:
                                 current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
                                 current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
                                 current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
@@ -127,8 +127,7 @@ endpackage
                                 repeat_instance = cpu_config[section][elements.module_name]["metadata"].get("repeat_instance", '')
                                 if not repeat_instance:
                                     mod_params_reg_count.append(f"localparam {stripped_module_name}_reg_count = {current_module_reg_count};")
-                                    if not any(x == stripped_name for x in local_mux_package_mask_list): #Check to see if module was already added
-                                        local_mux_package_mask_list.append(stripped_name)
+                                    local_mux_package_mask_list.append(stripped_name)
                                 mod_num_instances.append(mod_params_instances_tuple(stripped_module_name, repeat_instance))
                                 mod_input_ports.append(f"input  logic [31:0] {stripped_module_name}_data_i,")
                                 mod_data_i_values.append(mod_data_tuple(num_ports, stripped_module_name))
@@ -177,13 +176,13 @@ endpackage
                     verilog_lines.append(formatted_desc)
 
                 verilog_boilerplate = f"""\
-package {cpu_name + "_" if not strip_verilog else ""}{module_name.split(submodule_separator)[-1]}_mux_package;
+package {module_name if not strip_verilog else module_name.split(submodule_separator)[-1]}_mux_package;
     {mod_params_base_address_joined}
     {mod_params_reg_count_joined}
     {mod_params_num_instances_joined}
 endpackage
 
-module {cpu_name + "_" if not strip_verilog else ""}{module_name.split(submodule_separator)[-1]}_mux #(
+module {module_name if not strip_verilog else module_name.split(submodule_separator)[-1]}_mux #(
     parameter BaseAddress = 0
 )(
     input  logic        clk_i,
