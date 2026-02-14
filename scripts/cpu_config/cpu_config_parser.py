@@ -581,25 +581,87 @@ def parse_config(file_path):
     #Build a map of submodules to add to base module recursively
     parameters_list = build_parameter_table(config_data)
 
-    #Account for Repeat entries in modules
+    #Account for NOEXPREGS on a tree
+    for section, data in config_data.items():
+            new_section_data = data
+            if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                for module, module_data in data.items():
+                    current_module_level = module
+                    current_module_expand = module_data.get("metadata").get("expand_regs")
+                    current_repeat_expand = module_data.get("repeat", {}).get("expand_regs", {})
+                    for module, module_data in data.items():
+                        if module.startswith(current_module_level) and current_module_expand == "TRUE":
+                            new_section_data[module]["metadata"]["expand_regs"] = current_module_expand
+                            new_section_data[module].setdefault("repeat", {})
+                            new_section_data[module]["repeat"]["expand_regs"] = current_repeat_expand
+            config_data[section] = new_section_data
+
+    #Build list of Repeat Modules and Sort
+    repeat_list_initial = []
     for section, section_data in config_data.items():
         if section in ["BUILTIN_MODULES", "USER_MODULES"]:
-            new_section_data = {}
             for module, module_data in list(section_data.items()):
-                new_section_data[module] = module_data
-                repeat_info = module_data.get("repeat", {})
-                if repeat_info:
-                    try:
-                        repeat_val = repeat_info.get("value")
-                        repeat_count = int(resolve_expression(repeat_val, parameters_list))
-                    except:
-                        raise SyntaxError(f"Repeat value not correct in Entry: '{module}'")
-                    for i in range(1, repeat_count+1):
-                        new_key = f"{module}_{i}"
+                repeat_list_initial.append((module, resolve_expression(module_data.get("repeat", {}).get("value", 0), parameters_list)))
+
+    def sort_filtered_by_base_and_depth_desc(d):
+        def base_name(key):
+            return key.split(submodule_identifier, 1)[0]
+        def depth(key):
+            return key.count(submodule_identifier)
+        # 1. Filter out entries with value == 0
+        filtered = {k: v for k, v in d.items() if v != 0}
+        # 2. Sort by (base, -depth)
+        return dict(sorted(filtered.items(), key=lambda item: (base_name(item[0]), -depth(item[0]))))
+
+    repeat_dict_initial_sorted_filtered = sort_filtered_by_base_and_depth_desc(dict(repeat_list_initial))
+
+    def insert_after_match(haystack, needle, new_text):
+        #Inserts 'new_text' into 'haystack' immediately after the first occurrence of 'needle'.
+        i = haystack.find(needle)
+        if i == -1: # Substring not found
+            return haystack
+        # Rebuild the string using slicing and concatenation
+        return haystack[:i + len(needle)] + new_text + haystack[i + len(needle):]
+    
+    def insert_after_last_match(d, repeat_module, new_items): 
+        #Insert new_items after the LAST key in d that starts with repeat_module.
+        out = {}
+        last_match = None
+        # First pass: find the last matching key
+        for k in d.keys():
+            if k.startswith(repeat_module):
+                last_match = k
+        # Second pass: rebuild dict with insertion
+        for k, v in d.items():
+            out[k] = v
+            if k == last_match:
+                for nk, nv in new_items.items():
+                    out[nk] = nv
+        return out
+    
+    def strip_repeat_suffix(name):
+        parts = name.rsplit("_", 1)
+        return parts[0] if parts[-1].isdigit() else name
+
+    #Account for Repeat entries in modules
+    for repeat_module, repeat_count in repeat_dict_initial_sorted_filtered.items():
+        for section, section_data in config_data.items():
+            if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+                # snapshot of the ORIGINAL subtree for this repeat_module
+                orig_modules = [(m, section_data[m]) for m in section_data.keys() if m.startswith(repeat_module)]
+                for i in range(1, repeat_count+1):
+                    new_section_data = {}
+                    # only clone from the original snapshot, never from updated config
+                    for module, module_data in orig_modules:
+                        new_key = insert_after_match(module, repeat_module, f"_{i}")
                         new_section_data[new_key] = copy.deepcopy(module_data)
                         new_section_data[new_key]["metadata"]["repeat_instance"] = 'TRUE'
-                        new_section_data[new_key]["repeat"]["repeat_of"] = module.split(submodule_identifier)[-1]
-            config_data[section] = new_section_data
+                        new_section_data[new_key].setdefault("repeat", {})
+                        new_section_data[new_key]["repeat"]["repeat_of"] = strip_repeat_suffix(module.split(submodule_identifier)[-1])
+                        new_section_data[new_key]["repeat"]["expand_regs"] = module_data.get("repeat", {}).get("expand_regs", "FALSE")
+                        if new_section_data[new_key].get("submodule_of"):
+                            new_section_data[new_key]["submodule_of"] = insert_after_match(new_section_data[new_key]["submodule_of"], repeat_module, f"_{i}")
+                    config_data[section] = insert_after_last_match(config_data[section], repeat_module, new_section_data)
 
     #Entries -> (base_module, section, module_name, module_parent, register_count, id_count(for enforcing order), separator, base_reg_exp)
     submodule_reg_add_map_tuple = namedtuple("submodule_reg_add_map_tuple", ["base_module", "section", "module_name", "module_parent", "register_count", "id_count", "separator", "base_reg_exp"])
