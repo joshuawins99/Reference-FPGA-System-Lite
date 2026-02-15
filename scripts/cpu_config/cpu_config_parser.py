@@ -437,7 +437,6 @@ def parse_config(file_path):
     #Populate Register Count for AUTO Inferred Registers
     for section, data in infer_module_registers.items():
         for mod, count in data.items():
-            print(mod, count)
             if count > 0:
                 config_data[section][mod]["registers"] = count
             else:
