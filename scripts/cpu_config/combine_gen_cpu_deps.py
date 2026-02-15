@@ -5,6 +5,7 @@ import stat
 def generate_script(write_to_file=True):
     current_directory = os.path.dirname(os.path.abspath(__file__))
     modules = [
+        "cpu_config_helpers.py",
         "cpu_config_parser.py", 
         "headers.py", 
         "registers.py", 
