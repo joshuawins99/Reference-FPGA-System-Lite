@@ -54,7 +54,7 @@ Reg3 :
     Description : Reading from this register causes the IRQ to clear and will return the bit field with the triggered IRQ
     Permissions : Read
 ```
-A ```Description :``` field can also be escaped by a ```\``` to make it multiline. Permissions can be of type: ```Read, Read/Write, and Write```
+A ```Description :``` field can also be escaped by a ```\``` to make it multiline. Permissions can be of type: ```Read, Read/Write, and Write```. Each register entry follows the ```Regx :``` standard. Each ```Reg :``` must have a number after it as this corresponds to the order.
 
 ## Fields
 A register can have one or more fields that slice the register into multiple sub registers that correspond to a bit range. These follow the normal Verilog convention of [msb:lsb] and are used like this with the ```Bounds :``` keyword:
@@ -152,9 +152,9 @@ USER_MODULES:
             dac_e : TRUE : AUTO
                 Name : DAC SPI Controller
                 Description : SPI Master for Controlling DAC
-                Module_Include : {REF_PATH}/rtl/spi_master.sv
+                Module_Include : {REF_PATH}/rtl/dac_controller.sv
                 SUBMODULE:
-                    timer_e : TRUE : AUTO
-                        Module_Include : {REF_PATH}/rtl/timer_cpu.sv
+                    spi_e : TRUE : AUTO
+                        Module_Include : {REF_PATH}/rtl/spi.sv
 ```
 Submodules can be any n levels deep and proper indentation must be followed. The parser will error if the indentation is incorrect.

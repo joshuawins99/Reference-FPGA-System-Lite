@@ -27,12 +27,14 @@ def generate_verilog(mem_file, output_file, words=256, offset=0, prefill=1):
     reg [7:0] mem4 [0:WORDS-1];
 
     initial begin
-        mem1 = '{{default:0}};
-        mem2 = '{{default:0}};
-        mem3 = '{{default:0}};
-        mem4 = '{{default:0}};
-        if (PREFILL) begin
 """
+    for idx in range(len(mem_data)):
+        verilog_code += f"        mem1[OFFSET + {idx}] = 0;\n"
+        verilog_code += f"        mem2[OFFSET + {idx}] = 0;\n"
+        verilog_code += f"        mem3[OFFSET + {idx}] = 0;\n"
+        verilog_code += f"        mem4[OFFSET + {idx}] = 0;\n"
+
+    verilog_code += "   if (PREFILL) begin\n"
 
     # Embed initialization statements within the initial block
     for idx, line in enumerate(mem_data):
