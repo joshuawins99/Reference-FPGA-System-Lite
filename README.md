@@ -8,6 +8,9 @@ This is an FPGA Register System that contains a softcore RISC-V CPU that can com
 ## Compatibility
 This project was aimed to provide compatibility across a wide range of FPGAs from various vendors. This has stemmed from the full system project which has been tested on a variety of FPGAs. Any tool with SystemVerilog/Verilog support "should" work with this system.
 
+## NEW DOCS IN PROGRESS!!!!
+Refer here to new [Getting Started](./docs/getting_started.md) guide and [Config File Format](./docs/config_file_format.md) guide. This main page will eventually get cleaned in favor of the new docs.
+
 ## Building
 There are a few requirements for building this system:
 * Bash
