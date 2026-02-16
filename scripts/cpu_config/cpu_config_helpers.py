@@ -4,16 +4,21 @@ import copy
 import re
 import os
 
-def get_c_code_folders(parsed_configs):
-    """Extracts C_CODE_FOLDER values from the parsed configs if present."""
-    c_folders = {}
+def get_code_folders(parsed_configs):
+    """Extracts CODE_FOLDER values from the parsed configs if present."""
+    code_folders = {}
     for cpu_name, config in parsed_configs.items():
         for section in ["CONFIG_PARAMETERS"]:
             params = config.get(section, {})
-            folder_info = params.get("C_Code_Folder")
+            folder_info = None
+            if "C_Code_Folder" in params:
+                print("Warning: C_Code_Folder parameter deprecated! Use Code_Folder instead.")
+                folder_info = params.get("C_Code_Folder")
+            if "Code_Folder" in params:
+                folder_info = params.get("Code_Folder")
             if folder_info:
-                c_folders[cpu_name] = folder_info["value"]
-    return c_folders
+                code_folders[cpu_name] = folder_info["value"]
+    return code_folders
 
 def parse_file_path(input_param, config_data):
     """
@@ -54,7 +59,7 @@ def check_config_files(directory, config_file_names):
 
 def resolve_mod_include_filepath(base_dir, include_path, include_file_dirs):
     for dir_path in include_file_dirs:
-        # Each candidate should be resolved relative to the current file’s directory
+        # Each candidate should be resolved relative to the current file's directory
         candidate = os.path.normpath(os.path.join(base_dir, dir_path, include_path))
         if os.path.exists(candidate):
             return candidate
@@ -224,22 +229,22 @@ def compute_config_submodules(config_data, submodule_identifier):
     submodule_reg_add_map = []
     id_count = 0
     for section, data in config_data.items():
-            if section == "BUILTIN_MODULES" or section == "USER_MODULES":
-                for module, module_data in data.items():
-                    try:
-                        submodule_data = module_data.get('submodule_of', '')
-                    except:
-                        if module == "BaseAddress": continue #Indicates that the section has a base address specified and should be skipped
-                        else: raise SyntaxError (f"Module entry {module} not valid")
-                    try:
-                        registers_to_add = int(resolve_expression(module_data.get('registers', '0'), parameters_list))
-                    except:
-                        raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
-                    if submodule_data:
-                        submodule_data = module.split(submodule_identifier)
-                        base_reg_exp = config_data[section][submodule_data[0]]["metadata"]["expand_regs"]
-                        submodule_reg_add_map.append(submodule_reg_add_map_tuple(submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier, base_reg_exp))
-                        id_count +=1
+        if section == "BUILTIN_MODULES" or section == "USER_MODULES":
+            for module, module_data in data.items():
+                try:
+                    submodule_data = module_data.get('submodule_of', '')
+                except:
+                    if module == "BaseAddress": continue #Indicates that the section has a base address specified and should be skipped
+                    else: raise SyntaxError (f"Module entry {module} not valid")
+                try:
+                    registers_to_add = int(resolve_expression(module_data.get('registers', '0'), parameters_list))
+                except:
+                    raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
+                if submodule_data:
+                    submodule_data = module.split(submodule_identifier)
+                    base_reg_exp = config_data[section][submodule_data[0]]["metadata"]["expand_regs"]
+                    submodule_reg_add_map.append(submodule_reg_add_map_tuple(submodule_data[0], section, module, submodule_identifier.join(submodule_data[:-1]), registers_to_add, id_count, submodule_identifier, base_reg_exp))
+                    id_count +=1
 
     submodule_reg_add_map_sorted_key = {}
     submodule_reg_add_map_sorted_key["key"] = submodule_reg_add_map

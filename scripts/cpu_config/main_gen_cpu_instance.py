@@ -91,8 +91,8 @@ if args.gen_headers:
                                new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header, 
                                verilog_muxes=verilog_muxes, verilog_regs=verilog_regs, strip_verilog=strip_verilog) 
 
-c_code_folders = get_c_code_folders(parsed_configs)
-#print(c_code_folders)
+code_folders = get_code_folders(parsed_configs)
+#print(code_folders)
 
 default_c_code_path = "C_Code"  #Default Folder
 
@@ -108,7 +108,7 @@ if args.build:
         default_c_code_path = os.path.join(current_directory,go_up_n_levels(current_directory,3),default_c_code_path)
         if (filtered_dirs):
             for cpu_name in filtered_dirs:
-                config_folder = c_code_folders.get(cpu_name)
+                config_folder = code_folders.get(cpu_name)
                 build_folder = (
                     os.path.join(absolute_path, cpu_name, config_folder)
                     if config_folder
@@ -116,7 +116,7 @@ if args.build:
                 )
                 build_folder = os.path.abspath(build_folder)
                 parent_directory = go_up_n_levels(current_directory,3)
-                print(f"Running build for {cpu_name} using C Code folder: {build_folder}\n")
+                print(f"Running build for {cpu_name} using Code folder: {build_folder}\n")
                 try:
                     if args.gen_headers:
                         if (build_folder != default_c_code_path): 
@@ -129,7 +129,7 @@ if args.build:
                                     os.remove(f"{build_folder}/{cpu_name}_registers.zig")
                                 print(f"Moved generated header: {absolute_path}/{cpu_name}/{cpu_name}_registers.zig -> {build_folder}\n")
                                 shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.zig", build_folder)
-                    result = subprocess.run(["bash", f"{build_script}", "--c-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
+                    result = subprocess.run(["bash", f"{build_script}", "--code-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
                     print(result.stdout + result.stderr)
                 except FileNotFoundError:
                     raise FileNotFoundError (f"Build folder not found for {cpu_name}: {build_folder}")

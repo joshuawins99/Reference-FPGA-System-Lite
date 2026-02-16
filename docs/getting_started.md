@@ -18,7 +18,7 @@ Inside this cpu_test folder, create a file named ```cpu_config.txt```. In this f
 #CPU Config File
 
 CONFIG_PARAMETERS:
-    #C_Code_Folder : C_Code
+    #Code_Folder : C_Code
 
 BUILTIN_PARAMETERS:
     FPGAClkSpeed              : 40000000
@@ -46,7 +46,7 @@ USER_MODULES:
 This is the file that controls the way the system is generated. Each section has a specific meaning which will be detailed now.
 
 #### CONFIG_PARAMETERS
-This is used for defining a C_Code_Folder or directories for use with includes. This will be ignored for this example.
+This is used for defining a Code_Folder or directories for use with includes. This will be ignored for this example.
 #### BUILTIN_PARAMETERS
 Parameters in this section are passed to the Verilog portion and should not be deleted or added to. The usually relvant ones worth changing are ```FPGAClkSpeed``` which is the clock speed in which this system will be run at and ```BaudRateCPU```. This is used for setting the UART baud rate. For this example, set FPGAClkSpeed to whatever the clock frequency of your clock is and leave ```BaudRateCPU``` untouched.
 #### USER_PARAMETERS

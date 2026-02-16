@@ -11,7 +11,7 @@ There are various options in order to configure the generator script. The list o
 --save-user-registers                        Saves user registers to a cpu_registers.txt file
 ```
 ## --build
-Provides a way to build the code that runs on the cpu by the script itself. This build is the last step of the script process where all the dependencies are generated first. A ```build.sh``` file is required for the script to execute. The folder to use for the build is provided by the config file using ```C_Code_Folder :```. If not provided, the internal default will be used for building. The code provided is a good starting point for adding additional functionality.
+Provides a way to build the code that runs on the cpu by the script itself. This build is the last step of the script process where all the dependencies are generated first. A ```build.sh``` file is required for the script to execute. The folder to use for the build is provided by the config file using ```Code_Folder :```. If not provided, the internal default will be used for building. The code provided is a good starting point for adding additional functionality.
 
 ## --configs-path
 If the script isn't executed from within the folder where the cpu folder exists, the ```--configs-path``` can be provided to point to the relevant folder. This refers to the directory which contains the cpu folder with the config file.
