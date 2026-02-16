@@ -92,7 +92,7 @@ Python header for cpu_test saved to: /testcpu/cpu_test/cpu_test_registers.py
 Generated and saved SystemVerilog package for cpu_test_package: /testcpu/cpu_test/cpu_test_package.sv
 Saved SystemVerilog Module file: /testcpu/cpu_test/cpu_test_fpga_sys_lite.sv
 ```
-Four files should have been generated as shown in the console printout. These being ```cpu_test_fpga_sys_lite.sv```, ```cpu_test_package.sv```, ```cpu_test_registers.h```, and ```cpu_test_registers.py```. For the time being, just focus on the two .sv files. These files should be added to a verilog project. In order to use what was generated, refer to the example top level module below
+Four files should have been generated as shown in the console printout. These being ```cpu_test_fpga_sys_lite.sv```, ```cpu_test_package.sv```, ```cpu_test_registers.h```, and ```cpu_test_registers.py```. For the time being, just focus on the two .sv files. These files should be added to a Verilog project. In order to use what was generated, refer to the example top level module below
 ```Verilog
 module top 
 import cpu_test_package::*;
@@ -134,7 +134,7 @@ This module is all that is needed to get a functioning system. It provides a UAR
 An assumption will be made that the FPGA that is being targeted has had the relevant tools installed and set up ready to build a project. This guide will not cover this.
 
 ## Interacting with the System
-Once the project has been build and a suitable UART to USB interface has been connected to a computer, the system can start being used. In order to use the system, refer to the example python script below. This will utilize the generated python header from before.
+Once the project has been build and a suitable UART to USB interface has been connected to a computer, the system can start being used. In order to use the system, refer to the example Python script below. This will utilize the generated python header from before.
 
 ```Python
 from cpu_test_registers import *
