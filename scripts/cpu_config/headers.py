@@ -338,6 +338,8 @@ pub const Register = struct {
         
         parameter_table = build_parameter_table(cpu_config)
 
+        array_mask = []
+
         # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -421,6 +423,32 @@ pub const Register = struct {
                     zig_lines.append(f"pub const {module_id.lower()} = struct {{")
                     zig_lines.append(f"    pub const block = CompactRegisterBlock.init(0x{start_addr:04X}, {reg_count}, {reg_width_bytes});")
                     zig_lines.append(f" }};\n")
+
+                #Generate Repeat Module Arrays
+                if not resolve_expression(mod_repeat_info.get("value", {}), parameter_table) and subregisters > 0:
+                    adding_array = 0
+                    for entry in current_submodule_map:
+                        if entry.module_parent == module_name and cpu_config.get(section, {}).get(entry.module_name).get("repeat", {}).get("value", None):
+                            if adding_array == 0:
+                                zig_lines.append(f"// Repeat Instance Iterable Array(s) of {entry.module_parent}")
+                            module_name_stripped = entry.module_name.split(entry.separator)[-1]
+                            base_module_match = re.match(r"(.+?)(?:_\d+)?$", module_name_stripped)
+                            base_module = base_module_match.group(1)
+                            if module_name_stripped == base_module:
+                                array_name = entry.module_name.split(entry.separator)[-1]
+                                array_count = array_mask.count(array_name)
+                                array_iterator = f"_{array_count}" if array_count != 0 else ""
+                                zig_lines.append(f"pub const {array_name}_array{array_iterator} = [_]type {{")
+                                array_mask.append(array_name)
+                                adding_array = 1
+                                for entry in current_submodule_map:
+                                    if entry.module_parent == module_name and cpu_config.get(section, {}).get(entry.module_name).get("repeat", {}).get("value", None) and adding_array == 1:
+                                        module_name_stripped = entry.module_name.split(entry.separator)[-1]
+                                        if module_name_stripped == base_module or module_name_stripped.startswith(base_module + "_"):
+                                            zig_lines.append(f"    {entry.module_name},")
+                                if adding_array == 1:
+                                    zig_lines[-1] = zig_lines[-1].replace(",", "") #Remove comma from last entry
+                                    zig_lines.append(f"}};\n")
         
         with open(zig_filename, "w") as f:
             f.write("\n".join(zig_lines))
@@ -636,6 +664,8 @@ static inline uint8_t Read8(Register reg) {{
                 c_lines_storage.extend(temp_c_storage)
                 if temp_c_storage and (reg_count-subregisters) > 0:
                     c_lines_storage.append(f"}};\n")
+                    
+                #Generate Repeat Module Arrays
                 if not resolve_expression(mod_repeat_info.get("value", {}), parameter_table) and subregisters > 0:
                     array_type = ""
                     adding_array = 0
