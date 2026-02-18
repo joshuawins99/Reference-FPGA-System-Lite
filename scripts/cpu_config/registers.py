@@ -26,6 +26,16 @@ def resolve_expression(expr, parameter_table=None):
     # Replace SV literals before parameter substitution
     expr = re.sub(r"\d*'[hdbonHDBON][0-9a-fA-F_]+", sv_number_to_python, expr)
 
+    def python_literal_to_int(match):
+        raw = match.group(0)
+        try:
+            return str(int(raw, 0))  # Python auto-detects 0x / 0b / 0o / decimal
+        except Exception:
+            raise ValueError(f"Could not parse numeric literal: {raw}")
+
+    # Regex: match 0x..., 0b..., 0o..., or plain decimal numbers
+    expr = re.sub(r"\b(0[xX][0-9a-fA-F_]+|0[bB][01_]+|0[oO][0-7_]+|\d+)\b", python_literal_to_int, expr)
+
     # Replace parameters using token-aware substitution
     if parameter_table:
         # Longer names first to prevent partial collisions

@@ -9,6 +9,8 @@ Parameters can be configured a number of ways:
     * ```NumObjects : 72```
 * Using Verilog syntax:
     * ```Address : 'h4000 or 'd, 'b, 'o```
+* Using Python syntax:
+    * ```Address : 0x4000 or 0b, 0o```
 * With a bit width:
     * ```BitMask : 'h80 : {15:0}```
 
@@ -20,7 +22,7 @@ Module instantiations have a few modes they can be instantiated with:
 * Using defined address bounds:
     * ```my_module_e : TRUE: {'h9000, 'h900C}```
 * Using defined address bounds with expressions:
-    * ```version_string_e : TRUE : {'h8000, 'h8000+(VersionStringSize-1)*4}```
+    * ```version_string_e : TRUE : {0x8000, 0x8000+(VersionStringSize-1)*4}```
 * Using AUTO and a register count literal:
     * ```my_module_e : TRUE : AUTO : 3```
 * Using AUTO and an expression:
