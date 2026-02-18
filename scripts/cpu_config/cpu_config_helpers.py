@@ -158,7 +158,10 @@ def resolve_all_expressions(config_data):
                 if current_bounds:
                     bound_upper = resolve_expression(current_bounds[0], parameters_list)
                     bound_lower = resolve_expression(current_bounds[1], parameters_list)
-                    if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                    try:
+                        if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                            raise ValueError(f"Module Bounds for '{module}' don't resolve to an integer")
+                    except:
                         raise ValueError(f"Module Bounds for '{module}' don't resolve to an integer")
                     working_config_data[section][module]["bounds"] = [int(bound_upper), int(bound_lower)]
 
@@ -169,7 +172,10 @@ def resolve_all_expressions(config_data):
                 current_repeat = module_data.get("repeat", {})
                 if current_repeat:
                     repeat_num = resolve_expression(current_repeat.get("value", 0), parameters_list)
-                    if not repeat_num%1 == 0:
+                    try:
+                        if not repeat_num%1 == 0:
+                            raise ValueError(f"Repeat Count for '{module}' doesn't resolve to an integer")
+                    except:
                         raise ValueError(f"Repeat Count for '{module}' doesn't resolve to an integer")
                     working_config_data[section][module]["repeat"]["value"] = int(repeat_num)
 
@@ -187,7 +193,10 @@ def resolve_all_expressions(config_data):
                                 current_bounds = data.get("bounds", {})
                                 bound_upper = resolve_expression(current_bounds[0], parameters_list)
                                 bound_lower = resolve_expression(current_bounds[1], parameters_list)
-                                if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                                try:
+                                    if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                                        print(f"Warning: Field '{reg_name_value if reg_name_value else reg_name}'->'{field_name}' Bounds in '{module}' don't resolve to an integer")
+                                except:
                                     print(f"Warning: Field '{reg_name_value if reg_name_value else reg_name}'->'{field_name}' Bounds in '{module}' don't resolve to an integer")
                                 working_config_data[section][module]["regs"][reg_name]["fields"][field_name]["bounds"] = [int(ceil(bound_upper)), int(ceil(bound_lower))]
 
