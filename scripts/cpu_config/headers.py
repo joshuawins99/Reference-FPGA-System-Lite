@@ -1,7 +1,7 @@
 import os
 import re
 from collections import namedtuple
-from registers import resolve_expression, build_parameter_table, reorder_tree
+from registers import reorder_tree
 
 def sanitize_identifier(text):
         return re.sub(r'\W+', '_', text.strip()).upper()
@@ -20,7 +20,6 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
         mod_reg_package = []
         local_regs_package_mask_list = []
         local_mux_package_mask_list = []
-        parameter_table = build_parameter_table(cpu_config)
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
         for section in module_sections:
@@ -66,13 +65,13 @@ endpackage
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
                 try:
-                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
-                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    start_addr = module["bounds"][0]
+                    end_addr = module["bounds"][1]
                 except Exception:
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
+                subregisters = module.get("subregisters", "0")
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
                 mod_desc_str = mod_meta.get("description", "").strip()
@@ -119,8 +118,8 @@ endpackage
                         stripped_name = elements.module_name if not strip_verilog else stripped_name
                         if not local_mux_package_mask_list.count(stripped_name) > 1:
                             if not mux_package_mask_list.count(stripped_name) > 1:
-                                current_module_start_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][0], parameter_table)
-                                current_module_end_addr = resolve_expression(cpu_config[section][elements.module_name]["bounds"][1], parameter_table)
+                                current_module_start_addr = cpu_config[section][elements.module_name]["bounds"][0]
+                                current_module_end_addr = cpu_config[section][elements.module_name]["bounds"][1]
                                 current_module_reg_count = ((current_module_end_addr - current_module_start_addr) // reg_width_bytes) + 1
                                 mod_params_data.append(f"                   '{{'h{offset:04X}, {current_module_reg_count}}}, // {stripped_module_name}\n")
                                 mod_params_base_addresses.append(f"localparam {stripped_module_name}_offset = 'h{offset:04X};")
@@ -335,8 +334,6 @@ pub const Register = struct {
     }
 };                    
 """)
-        
-        parameter_table = build_parameter_table(cpu_config)
 
         array_mask = []
 
@@ -350,13 +347,13 @@ pub const Register = struct {
                 if module.get("flag") != "TRUE" or "bounds" not in module:
                     continue
                 try:
-                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
-                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    start_addr = module["bounds"][0]
+                    end_addr = module["bounds"][1]
                 except Exception:
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
+                subregisters = module.get("subregisters", 0)
                 module_id = module_name.upper()
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
@@ -425,7 +422,7 @@ pub const Register = struct {
                     zig_lines.append(f" }};\n")
 
                 #Generate Repeat Module Arrays
-                if not resolve_expression(mod_repeat_info.get("value", {}), parameter_table) and subregisters > 0:
+                if not mod_repeat_info.get("value", {}) and subregisters > 0:
                     adding_array = 0
                     for entry in current_submodule_map:
                         if entry.module_parent == module_name and cpu_config.get(section, {}).get(entry.module_name).get("repeat", {}).get("value", None):
@@ -530,9 +527,6 @@ static inline uint8_t Read8(Register reg) {{
         temp_c_storage = []
         array_mask = []
 
-        # Parameter Table
-        parameter_table = build_parameter_table(cpu_config)
-
         # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -546,13 +540,13 @@ static inline uint8_t Read8(Register reg) {{
                 if any(x.module_name == module_name for x in current_submodule_map) and not new_c_header:
                     continue
                 try:
-                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
-                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    start_addr = module["bounds"][0]
+                    end_addr = module["bounds"][1]
                 except Exception:
                     continue
 
                 reg_count = ((end_addr - start_addr) // reg_width_bytes) + 1
-                subregisters = int(resolve_expression(module.get("subregisters", "0"), parameter_table))
+                subregisters = module.get("subregisters", 0)
                 module_id = module_name.upper()
                 mod_meta = module.get("metadata", {})
                 mod_name_str = mod_meta.get("name", module_name)
@@ -666,7 +660,7 @@ static inline uint8_t Read8(Register reg) {{
                     c_lines_storage.append(f"}};\n")
                     
                 #Generate Repeat Module Arrays
-                if not resolve_expression(mod_repeat_info.get("value", {}), parameter_table) and subregisters > 0:
+                if not mod_repeat_info.get("value", {}) and subregisters > 0:
                     array_type = ""
                     adding_array = 0
                     for entry in current_submodule_map:
@@ -1051,9 +1045,6 @@ class FPGAInterface:
             
         temp_module_storage = []
 
-        # Parameter Table
-        parameter_table = build_parameter_table(cpu_config)
-
         # Modules
         module_sections = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -1067,8 +1058,8 @@ class FPGAInterface:
                 if any(x.module_name == module_name for x in current_submodule_map) and not new_python_header:
                     continue
                 try:
-                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
-                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    start_addr = module["bounds"][0]
+                    end_addr = module["bounds"][1]
                 except Exception:
                     continue
 
@@ -1120,7 +1111,7 @@ class FPGAInterface:
                                 sub_module = str(entry.module_name.split(entry.separator)[-1])
                                 get_current_addr = module.get("bounds")
                                 get_sub_addr = cpu_config[entry.section][entry.module_name]["bounds"]
-                                offset_from_base = resolve_expression(get_sub_addr[0], parameter_table)-resolve_expression(get_current_addr[0], parameter_table)
+                                offset_from_base = get_sub_addr[0]-get_current_addr[0]
                                 if current_module != module_id:
                                     current_module = module_id
                                     temp_module_storage.append(f"_{module_id}_subblocks = [")
@@ -1143,8 +1134,8 @@ class FPGAInterface:
                             if field_info:
                                 for field_name, field_data in field_info.items():
                                     try:
-                                        upper_bounds = resolve_expression(field_data['bounds'][0], parameter_table)
-                                        lower_bounds = resolve_expression(field_data['bounds'][1], parameter_table)
+                                        upper_bounds = field_data['bounds'][0]
+                                        lower_bounds = field_data['bounds'][1]
                                         if upper_bounds < 0 or lower_bounds < 0 or upper_bounds == None or lower_bounds == None:
                                             raise SyntaxError(f"Field Bounds for {module_name} is not valid")
                                         width = abs(upper_bounds - lower_bounds)+1

@@ -142,8 +142,6 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
         return addr
 
     for _, cpu_config in parsed_configs.items():
-        # Step 1: Build parameter table
-        parameter_table = build_parameter_table(cpu_config)
 
         global_mask = []  # Tracks all used address ranges globally
 
@@ -156,10 +154,7 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
             # Step 3: Resolve section BaseAddress
             base_expr = section.get("BaseAddress")
             try:
-                section_ptr = (
-                    resolve_expression(base_expr, parameter_table)
-                    if base_expr else 0x0000
-                )
+                section_ptr = (base_expr if base_expr else 0x0000)
                 section_ptr = (section_ptr + alignment - 1) & ~(alignment - 1)
             except Exception:
                 raise RuntimeError(f"Could not resolve BaseAddress for {section_name}")
@@ -179,8 +174,8 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
                 enabled = mod.get("flag")
                 if bounds and isinstance(bounds, list) and len(bounds) == 2:
                     try:
-                        start = resolve_expression(bounds[0], parameter_table)
-                        end = resolve_expression(bounds[1], parameter_table)
+                        start = bounds[0]
+                        end = bounds[1]
                         if start % alignment != 0 or end % alignment != 0:
                             raise ValueError(f"Invalid Address Range for {mod_name}: [{start}:{end}]. Expects {alignment} byte alignment.")
                         if start is not None and end is not None:
@@ -203,9 +198,9 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
                     continue
 
                 if mod.get("flag") == "TRUE" and mod.get("auto", False):
-                    raw_reg_count = str(mod.pop("registers", None))
+                    raw_reg_count = mod.pop("registers", 0)
                     try:
-                        reg_count = int(resolve_expression(raw_reg_count, parameter_table))
+                        reg_count = raw_reg_count
                     except Exception:
                         raise RuntimeError(f"Failed to resolve register count for {mod_name}")
 
@@ -217,7 +212,7 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
                     start_addr = find_free_address(global_mask + local_mask, needed_size, section_ptr)
                     end_addr = start_addr + (reg_count - 1) * reg_width_bytes
 
-                    mod["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
+                    mod["bounds"] = [start_addr, end_addr]
 
                     #print(f"\n[DEBUG] Attempting to assign '{mod_name}'")
                     #print(f"[DEBUG] Raw registers: {raw_reg_count}")
@@ -248,17 +243,17 @@ def assign_auto_addresses(parsed_configs, submodule_reg_map, alignment=4, reg_wi
             if current_base_module != submodule.base_module:
                 current_base_module = submodule.base_module
                 submodule_mask = []
-                current_base_module_start_addr = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][0])
-                current_base_module_end_addr = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][1])
-                current_base_module_subregister_count = resolve_expression(parsed_configs[cpu][submodule.section][submodule.base_module]["subregisters"])
+                current_base_module_start_addr = parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][0]
+                current_base_module_end_addr = parsed_configs[cpu][submodule.section][submodule.base_module]["bounds"][1]
+                current_base_module_subregister_count = parsed_configs[cpu][submodule.section][submodule.base_module]["subregisters"]
                 current_base_module_start_addr += 4*(int((current_base_module_end_addr-current_base_module_start_addr)//alignment + 1) - (current_base_module_subregister_count))
 
             start_addr = find_free_address(submodule_mask, max(1, submodule.register_count)*alignment, current_base_module_start_addr)
             end_addr = start_addr + (submodule.register_count-1)*alignment
             submodule_mask.append((start_addr, end_addr))
             if "subregisters" in parsed_configs[cpu][submodule.section][submodule.module_name]:
-                end_addr += resolve_expression(parsed_configs[cpu][submodule.section][submodule.module_name]["subregisters"])*alignment
-            parsed_configs[cpu][submodule.section][submodule.module_name]["bounds"] = [f"'h{start_addr:X}", f"'h{end_addr:X}"]
+                end_addr += parsed_configs[cpu][submodule.section][submodule.module_name]["subregisters"]*alignment
+            parsed_configs[cpu][submodule.section][submodule.module_name]["bounds"] = [start_addr, end_addr]
 
 def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path, file_name="cpu_registers.txt", print_to_console=True, save_to_file=False, reg_width_bytes=4, user_modules_only=False):
     """
@@ -272,9 +267,6 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
     for cpu_name, cpu_config in parsed_configs.items():
         lines.append("")
         lines.append(f"Instance: {cpu_name}")
-
-        # Build parameter lookup
-        parameter_table = build_parameter_table(cpu_config)
 
         section_list = ["USER_MODULES"] if user_modules_only else ["BUILTIN_MODULES", "USER_MODULES"]
 
@@ -294,10 +286,10 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                     continue
 
                 try:
-                    start_addr = resolve_expression(module["bounds"][0], parameter_table)
-                    end_addr = resolve_expression(module["bounds"][1], parameter_table)
+                    start_addr = module["bounds"][0]
+                    end_addr = module["bounds"][1]
                     if "subregisters" in module:
-                        subregisters = resolve_expression(module["subregisters"], parameter_table)
+                        subregisters = module["subregisters"]
                     else:
                         subregisters = 0
                 except Exception as e:
@@ -372,8 +364,8 @@ def dump_all_registers_from_configs(parsed_configs, submodule_reg_map, file_path
                             fname = field_info.get("name", field_key)
                             fbounds = field_info.get("bounds", [])
                             try:
-                                fupper = resolve_expression(fbounds[0], parameter_table)
-                                flower = resolve_expression(fbounds[1], parameter_table)
+                                fupper = fbounds[0]
+                                flower = fbounds[1]
                                 if fupper == None or flower == None or fupper < 0 or flower < 0:
                                     raise SyntaxError(f"Field Bounds for {module_name_orig} is not valid")
                             except:

@@ -231,7 +231,7 @@ def compute_config_submodules(config_data, submodule_identifier):
     for section, section_data in config_data.items():
         if section in ["BUILTIN_MODULES", "USER_MODULES"]:
             for module, module_data in list(section_data.items()):
-                repeat_list_initial.append((module, resolve_expression(module_data.get("repeat", {}).get("value", 0), parameters_list)))
+                repeat_list_initial.append((module, module_data.get("repeat", {}).get("value", 0)))
 
     def sort_filtered_by_base_and_depth_desc(d):
         def base_name(key):
@@ -305,10 +305,7 @@ def compute_config_submodules(config_data, submodule_identifier):
                 except:
                     if module == "BaseAddress": continue #Indicates that the section has a base address specified and should be skipped
                     else: raise SyntaxError (f"Module entry {module} not valid")
-                try:
-                    registers_to_add = int(resolve_expression(module_data.get('registers', '0'), parameters_list))
-                except:
-                    raise ValueError(f"'{module_data.get('registers', '0')}' for '{module}' is not a valid parameter/expression")
+                registers_to_add = module_data.get('registers', 0)
                 if submodule_data:
                     submodule_data = module.split(submodule_identifier)
                     base_reg_exp = config_data[section][submodule_data[0]]["metadata"]["expand_regs"]
@@ -331,15 +328,15 @@ def compute_config_submodules(config_data, submodule_identifier):
         children_map.setdefault(parent, []).append(full)
 
         # ensure dict entries exist
-        config_data.setdefault(section, {}).setdefault(full, {"registers": "0", "subregisters": "0"})
-        config_data.setdefault(section, {}).setdefault(parent, {"registers": "0", "subregisters": "0"})
+        config_data.setdefault(section, {}).setdefault(full, {"registers": 0, "subregisters": 0})
+        config_data.setdefault(section, {}).setdefault(parent, {"registers": 0, "subregisters": 0})
 
     # IMPORTANT: use the base's already-initialized registers as its native count
     # registers is a string; convert to int
 
     for base, section, _, _, _, _, _, _ in submodule_reg_add_map_sorted:
         if base not in native_counts:
-            base_initial = int(resolve_expression(config_data[section].get(base, {}).get("registers", "0"), parameters_list))
+            base_initial = config_data[section].get(base, {}).get("registers", 0)
             native_counts[base] = base_initial
 
     # Recursive total calculator (native + descendants)
@@ -353,14 +350,14 @@ def compute_config_submodules(config_data, submodule_identifier):
     for base, section, full, _, _, _, _, _ in submodule_reg_add_map_sorted:
         total = compute_total(full)
         native = native_counts.get(full, 0)
-        config_data[section][full]["registers"] = str(total)          # native + children
-        config_data[section][full]["subregisters"] = str(total - native)  # children only
+        config_data[section][full]["registers"] = total # native + children
+        config_data[section][full]["subregisters"] = total - native # children only
 
     # Ensure base (level 0) modules also get updated correctly
     for base, section, _, _, _, _, _, _ in submodule_reg_add_map_sorted:
         total = compute_total(base)
         native = native_counts.get(base, 0)
-        config_data[section][base]["registers"] = str(total)
-        config_data[section][base]["subregisters"] = str(total - native)
+        config_data[section][base]["registers"] = total
+        config_data[section][base]["subregisters"] = total - native
 
     return config_data, submodule_reg_add_map_sorted
