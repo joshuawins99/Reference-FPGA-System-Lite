@@ -355,7 +355,8 @@ def parse_config(file_path):
             }
         
         elif current_field and bounds_match:
-            bounds = [bounds_match.group(1), bounds_match.group(2)]
+            #Make sure to strip off {} for consistency with expressions if used
+            bounds = [bounds_match.group(1).strip("{}"), bounds_match.group(2).strip("{}")]
             config_data[current_section][current_module]["regs"][current_register]["fields"][current_field]["bounds"] = bounds
 
         elif current_module and reg_match:

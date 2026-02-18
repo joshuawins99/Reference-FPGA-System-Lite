@@ -1,5 +1,6 @@
 from registers import reorder_tree, resolve_expression, build_parameter_table
 from collections import namedtuple
+from math import ceil
 import copy
 import re
 import os
@@ -138,7 +139,75 @@ def normalize_indent(line, indent_size=4):
     indent_level = leading_spaces // indent_size
     return " " * (indent_level * indent_size) + stripped
 
+def resolve_all_expressions(config_data):
+    parameters_list = build_parameter_table(config_data)
+    working_config_data = copy.deepcopy(config_data)
+
+    #Resolve parameters first
+    for section, data in working_config_data.items():
+        if section in ["BUILTIN_PARAMETERS", "USER_PARAMETERS"]:
+            for parameter, parameter_data in data.items():
+                current_parameter_data = parameter_data.get("value")
+                working_config_data[section][parameter]["value"] = resolve_expression(current_parameter_data, parameters_list)
+
+    #Resolve Module Bounds
+    for section, data in working_config_data.items():
+        if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+            for module, module_data in data.items():
+                current_bounds = module_data.get("bounds")
+                if current_bounds:
+                    bound_upper = resolve_expression(current_bounds[0], parameters_list)
+                    bound_lower = resolve_expression(current_bounds[1], parameters_list)
+                    if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                        raise ValueError(f"Module Bounds for '{module}' don't resolve to an integer")
+                    working_config_data[section][module]["bounds"] = [int(bound_upper), int(bound_lower)]
+
+    # Resolve Repeats
+    for section, data in working_config_data.items():
+        if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+            for module, module_data in data.items():
+                current_repeat = module_data.get("repeat", {})
+                if current_repeat:
+                    repeat_num = resolve_expression(current_repeat.get("value", 0), parameters_list)
+                    if not repeat_num%1 == 0:
+                        raise ValueError(f"Repeat Count for '{module}' doesn't resolve to an integer")
+                    working_config_data[section][module]["repeat"]["value"] = int(repeat_num)
+
+    #Resolve Field Bounds
+    for section, data in working_config_data.items():
+        if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+            for module, module_data in data.items():
+                current_regs = module_data.get("regs", {})
+                if current_regs:
+                    for reg_name, data in current_regs.items():
+                        field_info = data.get("fields", {})
+                        reg_name_value = data.get("name", "")
+                        if field_info:
+                            for field_name, data in field_info.items():
+                                current_bounds = data.get("bounds", {})
+                                bound_upper = resolve_expression(current_bounds[0], parameters_list)
+                                bound_lower = resolve_expression(current_bounds[1], parameters_list)
+                                if not bound_upper%1 == 0 or not bound_lower%1 == 0:
+                                    print(f"Warning: Field '{reg_name_value if reg_name_value else reg_name}'->'{field_name}' Bounds in '{module}' don't resolve to an integer")
+                                working_config_data[section][module]["regs"][reg_name]["fields"][field_name]["bounds"] = [int(ceil(bound_upper)), int(ceil(bound_lower))]
+
+    #Resolve Register Counts
+    for section, data in working_config_data.items():
+        if section in ["BUILTIN_MODULES", "USER_MODULES"]:
+            for module, module_data in data.items():
+                reg_count = module_data.get("registers", {})
+                if reg_count:
+                    resolved_register_count = resolve_expression(reg_count, parameters_list)
+                    if not resolved_register_count%1 == 0:
+                        raise ValueError(f"Register Count for '{module}' doesn't resolve to an integer")
+                    working_config_data[section][module]["registers"] = int(resolved_register_count)
+
+    return working_config_data
+
 def compute_config_submodules(config_data, submodule_identifier):
+    #Resolve all expressions
+    config_data = resolve_all_expressions(config_data)
+
     #Build a map of submodules to add to base module recursively
     parameters_list = build_parameter_table(config_data)
 
