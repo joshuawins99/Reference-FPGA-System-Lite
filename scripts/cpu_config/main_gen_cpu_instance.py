@@ -130,7 +130,11 @@ if args.build:
                                 print(f"Moved generated header: {absolute_path}/{cpu_name}/{cpu_name}_registers.zig -> {build_folder}\n")
                                 shutil.move(f"{absolute_path}/{cpu_name}/{cpu_name}_registers.zig", build_folder)
                     result = subprocess.run(["bash", f"{build_script}", "--code-folder", build_folder], cwd=parent_directory, capture_output=True, text=True)
-                    print(result.stdout + result.stderr)
+                    if result.returncode != 0:
+                        print(result.stderr)
+                        raise subprocess.CalledProcessError(returncode=result.returncode, cmd=" ".join(result.args))
+                    else:
+                       print(result.stdout + result.stderr) 
                 except FileNotFoundError:
                     raise FileNotFoundError (f"Build folder not found for {cpu_name}: {build_folder}")
 

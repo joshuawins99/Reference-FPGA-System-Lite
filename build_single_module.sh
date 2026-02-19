@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 MODELSIM_ROOT_DIR=/tools/QuestaSim/questasim/linux_x86_64
 CUSTOM_CODE_FOLDER="C_Code"
