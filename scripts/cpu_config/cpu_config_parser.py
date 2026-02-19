@@ -31,7 +31,7 @@ def parse_config(file_path):
 
     # Pattern matching compile
     section_re = re.compile(r"^(\w+):\s*(.*)?$")
-    param_re = re.compile(r"(\w+)\s*:\s*(\"[^\"]+\"|\{[^}]+\}|[^\s:]+)(?:\s*:\s*\{(\d+:\d+)\})?")
+    param_re = re.compile( r"^\s*(\w+)\s*:\s*(\"[^\"]*\"|[^:\n]+?)(?:\s*:\s*\{(\d+:\d+)\})?\s*$")
     module_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*\{([^}]+)\}(?:\s*:\s*(\w+))?")
     auto_expr_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*\{(.+?)\}(?:\s*:\s*(\w+))?")
     auto_literal_re = re.compile(r"(\w+)\s*:\s*(TRUE|FALSE)\s*:\s*AUTO\s*:\s*(\d+)(?:\s*:\s*(\w+))?")

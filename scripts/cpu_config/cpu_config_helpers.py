@@ -23,21 +23,46 @@ def get_code_folders(parsed_configs):
 
 def parse_file_path(input_param, config_data):
     """
-    Replaces placeholders like {KEY} in input_param using CONFIG_PARAMETERS from config_data.
-    Each CONFIG_PARAMETERS entry is expected to be a dict with a 'value' key.
+    Recursively resolves placeholders like {KEY} using CONFIG_PARAMETERS.
+    Supports chained references and detects cycles.
     """
-    config_params = config_data.get("CONFIG_PARAMETERS", {}) #Get all items in CONFIG_PARAMETERS field
-    pattern = re.compile(r"\{(\w+)\}") #Create a match regex object
+    config_params = config_data.get("CONFIG_PARAMETERS", {})
+    placeholder_re = re.compile(r"\{(\w+)\}")
 
-    def replace_placeholder(match):
-        key = match.group(1)
-        param_entry = config_params.get(key)
-        if isinstance(param_entry, dict) and "value" in param_entry: #Checks if the parameter exists and has a value
-            return str(param_entry["value"]) #Returns the value as a string
-        else:
+    # Cache ensures each parameter is resolved once
+    resolved_cache = {}
+
+    def resolve_param(key, stack):
+        # Detect cycles like A -> B -> A
+        if key in stack:
+            cycle = " -> ".join(stack + [key])
+            raise SyntaxError(f"Recursive parameter cycle detected: {cycle}")
+
+        # Return cached resolution if available
+        if key in resolved_cache:
+            return resolved_cache[key]
+
+        entry = config_params.get(key)
+        if not (isinstance(entry, dict) and "value" in entry):
             raise SyntaxError(f"CONFIG_PARAMETERS missing or malformed for key: '{key}'")
 
-    return pattern.sub(replace_placeholder, input_param) #Will call replace_placeholder as needed if a match occurs
+        raw_value = str(entry["value"])
+
+        # Resolve placeholders inside this parameter's value
+        def replace(match):
+            inner_key = match.group(1)
+            return resolve_param(inner_key, stack + [key])
+
+        resolved_value = placeholder_re.sub(replace, raw_value)
+        resolved_cache[key] = resolved_value
+        return resolved_value
+
+    # Resolve placeholders in the input string
+    def replace_placeholder(match):
+        key = match.group(1)
+        return resolve_param(key, [])
+
+    return placeholder_re.sub(replace_placeholder, input_param)
 
 def list_folders(directory):
     """Returns a list of folders in the given directory."""
