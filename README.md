@@ -1,4 +1,4 @@
-# Reference-FPGA-System-Lite
+# VELOCitE (Verilog Embedded LOgic Core Engine)
 
 ## What is it?
 This is an FPGA Register System that contains a softcore RISC-V CPU that can communicate with a host computer or mcu. The system utilizes a simple UART for communication. The design intent was for this to be as easy to drop into a design as possible and provide a debug interface to interact with the FPGA using a computer with scripting.
