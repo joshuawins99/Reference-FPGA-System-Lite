@@ -121,6 +121,7 @@ import cpu_test_package::*;
         .external_data_o     (ex_data_o),
         .uart_rx_i           (uart_rx_i),
         .uart_tx_o           (uart_tx_o),
+        .uart_rts_o          (),
         .irq_i               ('0),
         .external_cpu_halt_i ('0),
         .cdc_clks_i          ('0),

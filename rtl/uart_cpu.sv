@@ -29,16 +29,17 @@ module uart_cpu #(
     parameter UARTBaudRate    = 0,
     parameter Address_Wording = 1
 )(
-    input logic clk_i,
-    input logic reset_i,
-    input logic [address_width-1:0] address_i,
-    input logic [7:0] data_i,
-    output logic [7:0] data_o,
-    input logic rd_wr_i,
-    output logic take_controlr_o,
-    output logic take_controlw_o,
-    output logic uart_tx_o,
-    input logic uart_rx_i
+    input  logic                     clk_i,
+    input  logic                     reset_i,
+    input  logic [address_width-1:0] address_i,
+    input  logic [7:0]               data_i,
+    output logic [7:0]               data_o,
+    input  logic                     rd_wr_i,
+    output logic                     take_controlr_o,
+    output logic                     take_controlw_o,
+    output logic                     uart_tx_o,
+    input  logic                     uart_rx_i,
+    output logic                     uart_rts_o
 );
 
     localparam TransmitData     = BaseAddress + (0*Address_Wording);
@@ -48,17 +49,18 @@ module uart_cpu #(
     localparam ReadFIFOStatus   = BaseAddress + (4*Address_Wording);
 
     logic [7:0] transmit_data = '0;
-    logic tx_start = 1'b0;
-    logic tx_start_reg = 1'b0;
-    logic tx_done;
-    logic tx_busy;
-    logic rx_done;
+    logic       tx_start = 1'b0;
+    logic       tx_start_reg = 1'b0;
+    logic       tx_done;
+    logic       tx_busy;
+    logic       rx_done;
     logic [7:0] rx_out;
     logic [7:0] fifo_data_out;
-    logic fifo_read;
-    logic fifo_almost_full;
-    logic fifo_empty;
+    logic       fifo_read;
+    logic       fifo_almost_full;
+    logic       fifo_empty;
     logic [7:0] data_o_reg;
+    logic       fifo_almost_empty;
 
     always_ff @(posedge clk_i) begin //Data Writes
         take_controlw_o <= 1'b0;
@@ -126,25 +128,33 @@ module uart_cpu #(
         end
     end
 
+    always_ff @(posedge clk_i) begin
+        if (fifo_almost_full == 1'b1) begin
+            uart_rts_o <= 1'b1;
+        end else if (fifo_almost_empty == 1'b1) begin
+            uart_rts_o <= 1'b0;
+        end
+    end
+
     async_fifo #(
         .DSIZE       (8),
         .ASIZE       (9),
-        .AWFULLSIZE  (1),
-        .AREMPTYSIZE (1),
+        .AWFULLSIZE  (8),
+        .AREMPTYSIZE (32),
         .FALLTHROUGH ("TRUE")
     ) async_fifo_uart_6502_1 (
-        .wclk   (clk_i),
-        .wrst_n (!reset_i),
-        .winc   (rx_done),
-        .wfull  (),
-        .awfull (fifo_almost_full),
-        .wdata  (rx_out),
-        .rclk   (clk_i),
-        .rrst_n (!reset_i),
-        .rinc   (fifo_read),
-        .rdata  (fifo_data_out),
-        .rempty (fifo_empty),
-        .arempty ()
+        .wclk    (clk_i),
+        .wrst_n  (!reset_i),
+        .winc    (rx_done),
+        .wfull   (),
+        .awfull  (fifo_almost_full),
+        .wdata   (rx_out),
+        .rclk    (clk_i),
+        .rrst_n  (!reset_i),
+        .rinc    (fifo_read),
+        .rdata   (fifo_data_out),
+        .rempty  (fifo_empty),
+        .arempty (fifo_almost_empty)
     );
 
     uart #(

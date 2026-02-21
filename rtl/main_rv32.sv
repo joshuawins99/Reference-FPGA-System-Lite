@@ -17,6 +17,7 @@ import cpu_reg_package::*;
     input  logic [data_width-1:0]    external_data_i,
     input  logic                     uart_rx_i,
     output logic                     uart_tx_o,
+    output logic                     uart_rts_o,
     output logic                     reset
 `endif
 );
@@ -36,6 +37,7 @@ import cpu_reg_package::*;
 
     logic                     uart_rx_i;
     logic                     uart_tx_o;
+    logic                     uart_rts_o;
 
     logic                     reset = 1'b1;
 
@@ -59,6 +61,7 @@ import cpu_reg_package::*;
     assign external_data_i           = cpubus.external_data_i;
     assign uart_rx_i                 = cpubus.uart_rx_i;
     assign cpubus.uart_tx_o          = uart_tx_o;
+    assign cpubus.uart_rts_o         = uart_rts_o;
     assign cpubus.we_ram_o           = we_ram_o;
 `endif
 
@@ -224,7 +227,8 @@ import cpu_reg_package::*;
         .data_o          (data_reg_inputs[uart_e]),
         .rd_wr_i         (cpu_we_o),
         .uart_tx_o       (uart_tx_o),
-        .uart_rx_i       (uart_rx_i)
+        .uart_rx_i       (uart_rx_i),
+        .uart_rts_o      (uart_rts_o)
     ); 
 
 endmodule

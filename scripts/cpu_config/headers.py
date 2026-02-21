@@ -961,10 +961,14 @@ class TransportInterface:
         raise NotImplementedError
 
 class SerialTransport(TransportInterface):
-    def __init__(self, serial_obj):
+    def __init__(self, serial_obj, use_cts=False):
         self.serial = serial_obj
+        self.use_cts = use_cts
     def write(self, data: str):
-        self.serial.write(data.encode('utf-8'))
+            if self.use_cts:
+                while not self.serial.cts:
+                    pass
+            self.serial.write(data.encode('utf-8'))
     def read(self) -> str:
         # ASCII text
         read_data = self.serial.readline()

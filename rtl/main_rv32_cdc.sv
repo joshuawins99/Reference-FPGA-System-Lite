@@ -10,6 +10,7 @@ import cpu_reg_package::*;
     output logic [data_width-1:0] external_data_o,
     input  logic                  uart_rx_i,
     output logic                  uart_tx_o,
+    output logic                  uart_rts_o,
     input  logic                  irq_i,
     input  logic                  external_cpu_halt_i,
     input  logic                  cdc_clks_i [num_entries],
@@ -35,6 +36,7 @@ import cpu_reg_package::*;
 
     assign uart_tx_o = cpubus.uart_tx_o;
     assign cpubus.uart_rx_i = uart_rx_i;
+    assign uart_rts_o = cpubus.uart_rts_o;
 
     assign cpubus.cpu_halt_i = cdc_busy | external_cpu_halt_i;
 
