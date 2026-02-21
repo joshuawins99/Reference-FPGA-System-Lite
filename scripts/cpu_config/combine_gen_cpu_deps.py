@@ -6,14 +6,17 @@ def generate_script(write_to_file=True):
     current_directory = os.path.dirname(os.path.abspath(__file__))
     modules = [
         "cpu_config_helpers.py",
-        "cpu_config_parser.py", 
-        "headers.py", 
+        "cpu_config_parser.py",
+        "headers/c_headers.py",
+        "headers/python_headers.py",
+        "headers/verilog_headers.py",
+        "headers/zig_headers.py",
         "registers.py", 
         "verilog.py", 
         "main_gen_cpu_instance.py"
     ]
     output_file = f"{current_directory}/../../generate_cpu_instance.py"
-    local_modules = [os.path.splitext(m)[0] for m in modules]
+    local_modules = [os.path.splitext(m)[0].split("/")[-1] for m in modules]
 
     output_lines = ["#!/usr/bin/env python3\n"]
 

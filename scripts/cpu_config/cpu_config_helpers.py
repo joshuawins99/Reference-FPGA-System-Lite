@@ -5,6 +5,9 @@ import copy
 import re
 import os
 
+def sanitize_identifier(text):
+        return re.sub(r'\W+', '_', text.strip()).upper()
+
 def get_code_folders(parsed_configs):
     """Extracts CODE_FOLDER values from the parsed configs if present."""
     code_folders = {}

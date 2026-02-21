@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 import os
+import sys
 import subprocess
 import shutil
 import argparse
 from cpu_config_parser import *
 from verilog import *
 from registers import *
-from headers import *
+
+sys.path.append('headers')
+
+from c_headers import export_c_headers
+from python_headers import export_python_headers
+from zig_headers import export_zig_headers
+from verilog_headers import export_verilog_headers
 
 config_file_names = ["cpu_config.txt", "cpu_config.cfg"]
 
@@ -87,9 +94,17 @@ if args.gen_headers:
                 verilog_regs = True
     
     if (filtered_dirs):
-        export_per_cpu_headers(parsed_configs, submodule_reg_map, absolute_path, user_modules_only=False, 
-                               new_python_header=new_python_header, new_c_header=new_c_header, zig_header=zig_header, 
-                               verilog_muxes=verilog_muxes, verilog_regs=verilog_regs, strip_verilog=strip_verilog) 
+        export_c_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, 
+                         directory_path=directory_path, reg_width_bytes=4, user_modules_only=False, new_c_header=new_c_header)
+        export_python_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, 
+                              directory_path=directory_path, reg_width_bytes=4, user_modules_only=False, new_python_header=new_python_header)
+        if zig_header:
+            export_zig_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, 
+                               reg_width_bytes=4, user_modules_only=False)
+        if verilog_muxes or verilog_regs:
+            export_verilog_headers(parsed_configs=parsed_configs, submodule_reg_map=submodule_reg_map, directory_path=directory_path, 
+                                   reg_width_bytes=4, user_modules_only=False, verilog_muxes=verilog_muxes, 
+                                   verilog_regs=verilog_regs, strip_verilog=strip_verilog)
 
 code_folders = get_code_folders(parsed_configs)
 #print(code_folders)

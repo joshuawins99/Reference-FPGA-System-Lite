@@ -24,3 +24,4 @@ sim_result.txt
 sim/cpu_sim/*.sv
 scripts/__pycache__
 scripts/cpu_config/__pycache__
+scripts/cpu_config/headers/__pycache__
