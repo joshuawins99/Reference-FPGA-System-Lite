@@ -8,7 +8,9 @@ from cpu_config_parser import *
 from verilog import *
 from registers import *
 
-sys.path.append('headers')
+current_directory = os.path.abspath(__file__)
+
+sys.path.append(os.path.join(os.path.dirname(current_directory), "headers"))
 
 from c_headers import export_c_headers
 from python_headers import export_python_headers
@@ -115,8 +117,6 @@ def go_up_n_levels(path, levels):
     for _ in range(levels):
         path = os.path.dirname(path)
     return path
-
-current_directory = os.path.abspath(__file__)
 
 if args.build:
     if os.path.exists(f"{go_up_n_levels(current_directory,3)}/{build_script}"):
