@@ -1,8 +1,5 @@
 import os
-import sys
 import re
-
-sys.path.append('../')
 
 from cpu_config_helpers import sanitize_identifier
 from registers import reorder_tree
@@ -176,6 +173,8 @@ static inline uint8_t Read8(Register reg) {{
                         comma = "," if i < (reg_count-subregisters) - 1 else ""
                         if reg_desc:
                             desc_lines = reg_desc.split('\n')
+                        else:
+                            desc_lines = ""
                         if not new_c_header:
                             c_enum_entries.append(f"    {entry_name} = {i}{comma} // {reg_name_raw}")
                             c_addr_macros.append(f"#define {entry_name}_ADDR 0x{addr:04X}")

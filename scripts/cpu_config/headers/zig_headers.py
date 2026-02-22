@@ -1,8 +1,5 @@
 import os
-import sys
 import re
-
-sys.path.append('../')
 
 from cpu_config_helpers import sanitize_identifier
 from registers import reorder_tree

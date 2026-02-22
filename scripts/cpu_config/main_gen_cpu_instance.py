@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import os
-import sys
 import subprocess
 import shutil
 import argparse
@@ -10,12 +9,10 @@ from registers import *
 
 current_directory = os.path.abspath(__file__)
 
-sys.path.append(os.path.join(os.path.dirname(current_directory), "headers"))
-
-from c_headers import export_c_headers
-from python_headers import export_python_headers
-from zig_headers import export_zig_headers
-from verilog_headers import export_verilog_headers
+from headers.c_headers import export_c_headers
+from headers.python_headers import export_python_headers
+from headers.zig_headers import export_zig_headers
+from headers.verilog_headers import export_verilog_headers
 
 config_file_names = ["cpu_config.txt", "cpu_config.cfg"]
 

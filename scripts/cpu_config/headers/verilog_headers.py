@@ -1,8 +1,5 @@
 import os
-import sys
 from collections import namedtuple
-
-sys.path.append('../')
 
 from cpu_config_helpers import sanitize_identifier
 from registers import reorder_tree
@@ -10,6 +7,7 @@ from registers import reorder_tree
 def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, reg_width_bytes=4, user_modules_only=False, verilog_muxes=False, verilog_regs=False, strip_verilog=False):
     regs_package_mask_list = []
     mux_package_mask_list = []
+    generate_files = True
     for cpu_name, cpu_config in parsed_configs.items():
         output_dir = cpu_name
         os.makedirs(f"{directory_path}/{output_dir}", exist_ok=True)
@@ -17,7 +15,13 @@ def export_verilog_headers(parsed_configs, submodule_reg_map, directory_path, re
         verilog_filename = os.path.join(directory_path, output_dir, f"{cpu_name}_muxes.sv")
         verilog_lines = []
         verilog_lines.append(f"// Auto-generated data mux modules and packages\n")
-        submodule_separator = current_submodule_map[0].separator
+        #Case where function is called and no submodules are present
+        try:
+            submodule_separator = current_submodule_map[0].separator
+        except:
+            print(f"Warning: Verilog headers not generated due to no submodules")
+            submodule_separator = " "
+            generate_files = False
         mod_reg_package = []
         local_regs_package_mask_list = []
         local_mux_package_mask_list = []
@@ -254,9 +258,10 @@ endmodule
         for item in local_regs_package_mask_list:
             regs_package_mask_list.append(item)
 
-        with open(verilog_filename, "w") as f:
-            if verilog_muxes:
-                f.write("\n".join(verilog_lines))
-            if verilog_regs:
-                f.write("\n".join(mod_reg_package))
-        print(f"Verilog mux modules and packages for {cpu_name} saved to: {verilog_filename}")
+        if generate_files == True:
+            with open(verilog_filename, "w") as f:
+                if verilog_muxes:
+                    f.write("\n".join(verilog_lines))
+                if verilog_regs:
+                    f.write("\n".join(mod_reg_package))
+            print(f"Verilog mux modules and packages for {cpu_name} saved to: {verilog_filename}")

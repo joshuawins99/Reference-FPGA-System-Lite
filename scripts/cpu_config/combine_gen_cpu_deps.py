@@ -17,6 +17,7 @@ def generate_script(write_to_file=True):
     ]
     output_file = f"{current_directory}/../../generate_cpu_instance.py"
     local_modules = [os.path.splitext(m)[0].split("/")[-1] for m in modules]
+    local_modules.append([".".join(os.path.splitext(m)[0].split("/")) for m in modules])
 
     output_lines = ["#!/usr/bin/env python3\n"]
 
