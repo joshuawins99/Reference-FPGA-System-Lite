@@ -490,4 +490,4 @@ class FPGAInterface:
 
         with open(py_filename, "w") as f:
             f.write("\n".join(py_lines))
-        print(f"Python header for {cpu_name} saved to: {py_filename}\n")
+        print(f"Python header for {cpu_name} saved to: {os.path.abspath(py_filename)}\n")

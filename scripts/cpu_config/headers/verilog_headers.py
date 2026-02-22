@@ -264,4 +264,4 @@ endmodule
                     f.write("\n".join(verilog_lines))
                 if verilog_regs:
                     f.write("\n".join(mod_reg_package))
-            print(f"Verilog mux modules and packages for {cpu_name} saved to: {verilog_filename}")
+            print(f"Verilog mux modules and packages for {cpu_name} saved to: {os.path.abspath(verilog_filename)}")

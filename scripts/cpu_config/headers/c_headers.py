@@ -256,4 +256,4 @@ static inline uint8_t Read8(Register reg) {{
         
         with open(c_filename, "w") as f:
             f.write("\n".join(c_lines))
-        print(f"C header for {cpu_name} saved to: {c_filename}")
+        print(f"C header for {cpu_name} saved to: {os.path.abspath(c_filename)}")

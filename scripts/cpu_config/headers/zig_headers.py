@@ -193,4 +193,4 @@ pub const Register = struct {
         
         with open(zig_filename, "w") as f:
             f.write("\n".join(zig_lines))
-        print(f"Zig header for {cpu_name} saved to: {zig_filename}")
+        print(f"Zig header for {cpu_name} saved to: {os.path.abspath(zig_filename)}")
